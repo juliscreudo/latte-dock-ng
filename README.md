@@ -33,20 +33,19 @@ Installation
 
 ### Requirements
 
-We need to use at least:
+Runtime requirements:
 
 - **Plasma >= 6.3.0** (developed and fully verified on Plasma 6.5+)
-- **PlasmaWaylandProtocols >= 1.6.0**
 - **Qt >= 6.6**
+- **KCMUtils, Kirigami and NewStuff QML modules**
 - **Wayland session (X11 is not supported in this fork)**
 
-Minimum requirements:
- 
-**tools:**
+Source build requirements:
+
+**Build tools:**
 ```
- bash
- cmake >= 3.20 (C++20 capable compiler: GCC 10+ / Clang 12+)
- extra-cmake-modules
+ bash, git, cmake >= 3.20, extra-cmake-modules, make or Ninja,
+ pkg-config, gettext, and a C++20-capable compiler (GCC 10+ / Clang 12+)
 ```
 
 **development packages for:**
@@ -63,8 +62,10 @@ Minimum requirements:
  PlasmaQuick >= 6.3.0
  PlasmaActivities >= 6.3.0
  KWayland >= 6.0.0
+ PlasmaActivitiesStats >= 6.3.0
  LibTaskManager >= 6.3.0
 
+ KF6Config >= 6.0.0
  KF6CoreAddons >= 6.0.0
  KF6GuiAddons >= 6.0.0
  KF6DBusAddons >= 6.0.0
@@ -80,62 +81,49 @@ Minimum requirements:
  KF6GlobalAccel >= 6.0.0
  KF6Crash >= 6.0.0
  KF6WindowSystem >= 6.0.0
+ KF6Svg >= 6.0.0
 
  PlasmaWaylandProtocols >= 1.6
  Wayland::Client
  LayerShellQt >= 6.0.0
 ```
 
+### Repository installation (recommended)
+
+Repositories provide package-manager upgrades and resolve dependencies automatically:
+
+- **Fedora 44:** [Fedora COPR](https://copr.fedorainfracloud.org/coprs/ruizhi-lab/latte-dock-ng/).
+- **Debian 13 / testing and Ubuntu 26.04:** [signed APT repository](https://ruizhi-lab.github.io/latte-dock-ng/).
+- **Gentoo:** [ruizhi-overlay](https://github.com/ruizhi-lab/gentoo-overlay).
+- **openSUSE Tumbleweed / Mageia Cauldron:** distribution-specific repositories on the COPR project page.
+- **NixOS:** the project's flake and NixOS module.
+
+See [`INSTALLATION.md`](INSTALLATION.md) for setup and upgrade commands.
+
 ### Binary packages (GitHub Releases)
 
-Prebuilt packages are attached to every
-[GitHub release](https://github.com/ruizhi-lab/latte-dock-ng/releases):
+Download packages for your distribution from
+[GitHub Releases](https://github.com/ruizhi-lab/latte-dock-ng/releases):
 
-- **`.deb`** — two variants are provided, because libplasma's soname
-  changed from 6 to 7 between Plasma 6.5 and 6.6 (Debian package
-  `libplasma6` → `libplasma7`) and the two camps are binary-incompatible:
-  - `latte-dock-ng_<ver>-1_amd64.deb` (plain name) — built on Debian testing,
-    links `libplasma7`; for **Debian testing and Ubuntu 26.04+**
-  - `latte-dock-ng_<ver>-1+deb13u1_amd64.deb` — built on Debian 13
-    (trixie), links `libplasma6`; the `+deb13u1` revision marks the
-    Debian 13 (stable) build
-- **`.rpm`** — release packages target Fedora, openSUSE Tumbleweed, and
-  Mageia Cauldron (Mageia 11 development) using native RPM packaging. Do not
-  substitute the Fedora RPM on openSUSE or Mageia. COPR is configured for Fedora, openSUSE
-  Tumbleweed, and Mageia; Fedora has been verified. Keep the standalone RPMs
-  until the other COPR builds and release-version handling are verified.
-- **`pkg.tar.zst`** — Arch Linux
+- **Debian 13:** `latte-dock-ng_<ver>-1+deb13u1_amd64.deb`.
+- **Debian testing:** `latte-dock-ng_<ver>-1_amd64.deb`.
+- **Ubuntu 26.04:** `latte-dock-ng_<ver>-1ubuntu1_amd64.deb`.
+- **Fedora / openSUSE Tumbleweed / Mageia Cauldron:** use the RPM named for your distribution.
+- **Arch Linux:** `pkg.tar.zst`.
 
-The release pipeline includes native package-manager install checks
-(apt / dnf / pacman) and a headless launch on supported targets. The NixOS
-flake is also checked and built as a release gate; Nix users consume it through
-the flake interface instead of a standalone binary archive. See the current
-CI caveat below before treating every target as verified.
+Debian 13 uses libplasma6; Debian testing and Ubuntu use libplasma7. Select
+packages for your target distribution rather than mixing these ABI versions.
+All release packages target amd64/x86_64. NixOS uses the flake instead of a
+standalone release package. openSUSE Leap with Plasma 5 is unsupported.
 
-Current CI caveat (2026-10-03): the
-[main-branch build run](https://github.com/ruizhi-lab/latte-dock-ng/actions/runs/37113104585)
-failed in both openSUSE jobs while building their dependency container images.
-`zypper` could not resolve a Tumbleweed repository conflict involving
-`glib2-stage1-devel` and incompatible `libpcre2-8-0` versions, so the RPM
-build/install steps did not run. The Build workflow had forced openSUSE jobs
-onto a moving USTC mirror while the Release workflow used upstream repos; CI
-now consistently uses upstream repos for these jobs. Rerun the workflow to
-verify the fix. The openSUSE CI status is independent of COPR builds.
+### Building from source
 
-The RPM requires glibc >= 2.34, a toolchain artifact
-(`__libc_start_main@GLIBC_2.34` from the build host's crt1) present in every
-modern build. openSUSE Leap 15.x is **not** supported: it ships Plasma 5.27,
-which predates the Plasma 6.3 requirement.
+See [`INSTALLATION.md`](INSTALLATION.md) for distribution-specific build
+packages and installation commands. Repository and release-package installs
+do not require development packages.
 
-## Installation
-
-See [`INSTALLATION.md`](INSTALLATION.md) for end-user instructions to install
-from COPR, the Debian/Ubuntu APT repository, the Gentoo overlay, the NixOS
-flake, or GitHub Release packages.
-
-Maintainer release and repository status is documented in
-[`docs/release-workflow.md`](docs/release-workflow.md); COPR setup details are
-in [`docs/third-party-rpm-repositories.md`](docs/third-party-rpm-repositories.md).
+Maintainer release procedures are in
+[`docs/release-workflow.md`](docs/release-workflow.md).
 
 ## Run Latte Dock NG
 

@@ -1,62 +1,23 @@
 Installation
 ============
 
-> This fork targets **KDE Plasma 6.3+ on Wayland only** (amd64/x86\_64 architecture). Development happens on Plasma 6.5+ / Qt 6.11; Plasma 6.3 (Debian 13 trixie) is verified as the minimum supported version. X11 and other architectures are not supported.
-> All dependency packages below are Qt6 / KF6. Legacy Qt5/KF5 package names from upstream will not work.
->
-> Two .deb variants are attached to each release because the libplasma
-> soname changed from 6 to 7 between Plasma 6.5 and 6.6 (Debian package
-> `libplasma6` → `libplasma7`), which splits the supported range into two
-> binary-incompatible camps:
-> - **`..._amd64.deb`** (plain name) — built on **Debian sid**, links `libplasma7`; for **Debian testing / sid and Ubuntu 26.04+**.
-> - **`...-1+deb13u1_amd64.deb`** — built on **Debian 13 (trixie)**, links `libplasma6`; the `+deb13u1` revision marks the **Debian 13 (stable)** build.
-> Do not build either variant on a newer distro than its target — versioned
-> dependencies (`dpkg-shlibdeps`) would raise the lower bound and break
-> installation.
->
-> Debian stable and the current Fedora stable are priority support targets
-> because of their large user bases. They are pinned to explicit releases in
-> CI and package metadata; update those pins when Debian 14 or the next Fedora
-> release becomes stable. The CI matrix also checks Debian sid, openSUSE,
-> Mageia Cauldron, Ubuntu, Arch, and NixOS on every
-> `main` push. Native package installation is tested separately from source
-> installation, so a package that only builds but cannot be installed is rejected.
-> Gentoo is best verified on a native Gentoo host, where Portage can reuse its
-> configured signed binhost instead of rebuilding the full Plasma stack.
->
-> **openSUSE CI status (2026-10-03):** the latest recorded main-branch run
-> failed while installing dependencies in the openSUSE packaging and
-> verification container images, before compiling or installing the RPM.
-> `zypper` reported a Tumbleweed dependency conflict involving
-> `glib2-stage1-devel` and `libpcre2-8-0`. See the
-> [failed run](https://github.com/ruizhi-lab/latte-dock-ng/actions/runs/37113104585).
-> The Build workflow now uses the upstream openSUSE repositories, matching the
-> Release workflow; rerun CI to confirm the fix.
-> Fedora COPR builds and the Debian/Ubuntu APT repository are verified. The
-> COPR project also targets Mageia and openSUSE; check the COPR project page for
-> the latest per-distribution build status.
+> This fork targets **KDE Plasma 6.3+ on Wayland** on amd64/x86\_64. X11 and other architectures are unsupported. Source-build commands use Qt 6 and KF6 package names.
+
+Repository and binary-package installs resolve runtime dependencies through the
+package manager. The development packages below are needed only when building
+from source. KCMUtils, Kirigami and NewStuff QML modules are runtime
+requirements. Plasma Wayland Protocols supplies build-time XML definitions;
+it is not a separate runtime requirement. Match packages to your distribution
+and Plasma ABI: Debian 13 uses libplasma6; Debian testing and Ubuntu 26.04 use
+libplasma7.
 
 ## Kubuntu / KDE Neon (26.04+)
 
-```bash
-sudo apt install \
-  cmake extra-cmake-modules \
-  qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-wayland-dev \
-  libplasma-dev libplasmaactivities-dev libplasmaactivitiesstats-dev plasma-workspace-dev kwayland-dev \
-  libkf6config-dev libkf6coreaddons-dev libkf6guiaddons-dev libkf6dbusaddons-dev \
-  libkf6kcmutils-dev \
-  libkf6declarative-dev libkf6itemmodels-dev libkf6xmlgui-dev libkf6iconthemes-dev \
-  libkf6kio-dev libkf6i18n-dev libkf6notifications-dev \
-  libkf6newstuff-dev libkf6archive-dev libkf6globalaccel-dev \
-  libkf6crash-dev libkf6windowsystem-dev libkf6package-dev libkf6svg-dev \
-  plasma-wayland-protocols libwayland-dev \
-  liblayershellqtinterface-dev \
-  gettext build-essential git pkgconf
-```
+Use the Debian/Ubuntu source-build dependencies below. The same package list applies.
 
-## Debian and Ubuntu (13 trixie / Testing / Ubuntu 26.04+)
+## Debian and Ubuntu
 
-Debian 13 (trixie) ships Plasma 6.3.6 and is the minimum supported version; the same build instructions apply to testing and sid.
+Debian 13 (trixie) is the minimum supported release. The source-build instructions also apply to Debian testing and Ubuntu 26.04+.
 
 The signed [Latte Dock NG APT repository](https://ruizhi-lab.github.io/latte-dock-ng/)
 supports amd64. Add its signing key:
@@ -91,36 +52,42 @@ sudo apt update
 sudo apt install latte-dock-ng
 ```
 
-The Ubuntu suite uses the Debian testing package, which CI verifies on Ubuntu
-26.04. Do not add multiple suites to the same system. Maintainer instructions
-for the repository are in [`docs/debian-apt-repository.md`](docs/debian-apt-repository.md).
+The Ubuntu suite uses the package built and install-checked on Ubuntu 26.04.
+Do not add multiple suites to one system. See
+[`docs/debian-apt-repository.md`](docs/debian-apt-repository.md) for maintainer details.
 
-Alternatively, download a prebuilt `.deb` from the
-[GitHub release](https://github.com/ruizhi-lab/latte-dock-ng/releases) — see
-the two-variant note at the top of this page:
+Alternatively, download a prebuilt `.deb` from
+[GitHub Releases](https://github.com/ruizhi-lab/latte-dock-ng/releases).
+Choose the package matching your distribution:
 
 ```bash
-# Debian testing / sid (and Ubuntu 26.04+)
+# Debian testing
 sudo apt install ./latte-dock-ng_<ver>-1_amd64.deb
 # Debian 13 (stable)
 sudo apt install ./latte-dock-ng_<ver>-1+deb13u1_amd64.deb
+# Ubuntu 26.04
+sudo apt install ./latte-dock-ng_<ver>-1ubuntu1_amd64.deb
 ```
+
+To build from source instead, install the build dependencies and runtime QML modules:
 
 ```bash
 sudo apt install \
   cmake extra-cmake-modules \
-  qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-wayland-dev \
+  qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-declarative-private-dev qt6-wayland-dev \
   libplasma-dev libplasmaactivities-dev libplasmaactivitiesstats-dev plasma-workspace-dev kwayland-dev \
   libkf6config-dev libkf6coreaddons-dev libkf6guiaddons-dev libkf6dbusaddons-dev \
-  libkf6kcmutils-dev \
   libkf6declarative-dev libkf6itemmodels-dev libkf6xmlgui-dev libkf6iconthemes-dev \
   libkf6kio-dev libkf6i18n-dev libkf6notifications-dev \
   libkf6newstuff-dev libkf6archive-dev libkf6globalaccel-dev \
   libkf6crash-dev libkf6windowsystem-dev libkf6package-dev libkf6svg-dev \
   plasma-wayland-protocols libwayland-dev \
   liblayershellqtinterface-dev \
+  qml6-module-org-kde-kirigami qml6-module-org-kde-kcmutils qml6-module-org-kde-newstuff \
   gettext build-essential git pkgconf
 ```
+
+The APT repository and release packages install these QML modules as dependencies.
 
 ## Arch Linux
 
@@ -130,13 +97,12 @@ sudo pacman -S \
   cmake extra-cmake-modules \
   qt6-base qt6-declarative qt6-wayland \
   libplasma plasma-activities plasma-activities-stats plasma-workspace kwayland \
-  kconfig kcoreaddons kguiaddons kdbusaddons \
-  kcmutils \
+  kconfig kcoreaddons kguiaddons kdbusaddons kcmutils kirigami \
   kdeclarative kitemmodels kxmlgui kiconthemes kio ki18n knotifications \
   knewstuff karchive kpackage kglobalaccel kcrash kwindowsystem ksvg \
   plasma-wayland-protocols wayland \
   layer-shell-qt \
-  gcc gettext git pkgconf
+  gcc make gettext git pkgconf
 ```
 
 ## Gentoo
@@ -156,10 +122,15 @@ Install the prebuilt package from Fedora COPR:
 ```bash
 sudo dnf copr enable ruizhi-lab/latte-dock-ng
 sudo dnf install latte-dock-ng
+
+# Upgrade all packages and refresh repository metadata
+sudo dnf update --refresh
 ```
 
-The COPR build and installation have been verified on Fedora 44. To build
-from source instead, install these dependencies:
+Restart Latte after upgrading to run the new binary. `--refresh` avoids using
+cached repository metadata that predates a new COPR release.
+
+To build from source instead, install these dependencies:
 
 ```bash
 sudo dnf install \
@@ -167,14 +138,14 @@ sudo dnf install \
   qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwayland-devel \
   kf6-plasma-devel plasma-activities-devel plasma-activities-stats-devel plasma-workspace-devel kwayland-devel \
   kf6-kconfig-devel kf6-kcoreaddons-devel kf6-kguiaddons-devel kf6-kdbusaddons-devel \
-  kf6-kcmutils-devel \
+  kf6-kcmutils kf6-kirigami kf6-knewstuff \
   kf6-kdeclarative-devel kf6-kitemmodels-devel kf6-kxmlgui-devel kf6-kiconthemes-devel \
   kf6-kio-devel kf6-ki18n-devel kf6-knotifications-devel \
   kf6-knewstuff-devel kf6-karchive-devel kf6-kglobalaccel-devel \
   kf6-kcrash-devel kf6-kwindowsystem-devel kf6-kpackage-devel kf6-ksvg-devel \
   plasma-wayland-protocols-devel wayland-devel \
   layer-shell-qt-devel \
-  gcc-c++ gettext git pkgconf-pkg-config
+  gcc-c++ make gettext git pkgconf-pkg-config
 ```
 
 ## openSUSE Tumbleweed
@@ -183,10 +154,7 @@ Install from the `ruizhi-lab/latte-dock-ng` COPR repository. Follow the
 openSUSE-specific repository instructions shown on the
 [COPR project page](https://copr.fedorainfracloud.org/coprs/ruizhi-lab/latte-dock-ng/).
 
-The current COPR RPM version is a Git snapshot (`0.0.git...`), not the
-`vX.Y.Z` release version; use the matching GitHub Release RPM if you need
-release-aligned versioning. Use COPR on Tumbleweed x86_64 only; openSUSE Leap
-is unsupported.
+Use COPR on Tumbleweed x86_64 only; openSUSE Leap with Plasma 5 is unsupported.
 To build from source instead, install these dependencies:
 
 ```bash
@@ -195,14 +163,14 @@ sudo zypper install \
   qt6-base-devel qt6-declarative-devel qt6-wayland-devel \
   libplasma6-devel plasma6-activities-devel plasma6-activities-stats-devel plasma6-workspace-devel kwayland6-devel \
   kf6-kconfig-devel kf6-kcoreaddons-devel kf6-kguiaddons-devel kf6-kdbusaddons-devel \
-  kf6-kcmutils-devel \
+  kf6-kcmutils kf6-kirigami kf6-knewstuff \
   kf6-kdeclarative-devel kf6-kitemmodels-devel kf6-kxmlgui-devel kf6-kiconthemes-devel \
   kf6-kio-devel kf6-ki18n-devel kf6-knotifications-devel \
   kf6-knewstuff-devel kf6-karchive-devel kf6-kglobalaccel-devel \
   kf6-kcrash-devel kf6-kwindowsystem-devel kf6-kpackage-devel kf6-ksvg-devel \
   plasma-wayland-protocols wayland-devel \
   layer-shell-qt6-devel \
-  gcc-c++ gettext git pkgconf
+  gcc-c++ make gettext git pkgconf
 ```
 
 ## Mageia Cauldron (Mageia 11 development)
@@ -211,12 +179,9 @@ Install from the `ruizhi-lab/latte-dock-ng` COPR repository using the
 Mageia-specific repository instructions shown on the
 [COPR project page](https://copr.fedorainfracloud.org/coprs/ruizhi-lab/latte-dock-ng/).
 The Mageia build target is Cauldron. Confirm its latest build succeeded before
-installing. As a fallback,
-download the Mageia-specific RPM from
-[GitHub Releases](https://github.com/ruizhi-lab/latte-dock-ng/releases). Do
-not use the Fedora or openSUSE RPM. The current COPR RPM version is a Git
-snapshot (`0.0.git...`), not the `vX.Y.Z` release version. To build from
-source, install these dependencies:
+installing. Alternatively, download the Mageia RPM from
+[GitHub Releases](https://github.com/ruizhi-lab/latte-dock-ng/releases). Do not
+use the Fedora or openSUSE RPM. For a source build, install:
 
 ```bash
 sudo dnf install \
@@ -227,14 +192,14 @@ sudo dnf install \
   lib64plasma-devel lib64plasmaactivities-devel lib64plasmaactivitiesstats-devel \
   lib64plasma-workspace-devel lib64kwayland-devel \
   lib64kf6config-devel lib64kf6coreaddons-devel lib64kf6guiaddons-devel lib64kf6dbusaddons-devel \
-  lib64kcmutils-devel \
+  lib64kf6kcmutils6 lib64kirigami6 lib64kf6newstuffcore6 \
   lib64kf6declarative-devel lib64kf6itemmodels-devel lib64kf6xmlgui-devel lib64kf6iconthemes-devel \
   lib64kf6kio-devel lib64kf6i18n-devel lib64kf6notifications-devel \
   lib64kf6newstuff-devel lib64kf6archive-devel lib64kf6globalaccel-devel \
   lib64kf6crash-devel lib64kf6windowsystem-devel lib64kf6package-devel lib64kf6svg-devel \
   plasma-wayland-protocols-devel lib64wayland-devel lib64glvnd-devel \
   lib64layer-shell-qt-devel \
-  gcc-c++ gettext git pkgconf-pkg-config
+  gcc-c++ make gettext git pkgconf-pkg-config
 ```
 
 ## Building and Installing
@@ -376,12 +341,12 @@ docker compose run --rm debian     # Debian 13 (current stable)
 docker compose run --rm nixos      # NixOS (nixos-unstable)
 ```
 
-For Debian sid and Gentoo, run the corresponding verifier directly:
+For Debian testing and Gentoo, run the corresponding verifier directly:
 
 ```bash
-docker build -f Dockerfile.debian-sid -t latte-debian-sid .
+docker build -f Dockerfile.debian-testing -t latte-debian-testing .
 docker run --rm -v "$PWD/..:/src:ro" --tmpfs /build:exec -w /build \
-  latte-debian-sid bash /src/docker/verify-install.sh debian-sid
+  latte-debian-testing bash /src/docker/verify-install.sh debian-testing
 docker build -f Dockerfile.gentoo -t latte-gentoo .
 docker run --rm -v "$PWD/..:/src:ro" --tmpfs /build:exec -w /build \
   latte-gentoo bash /src/docker/verify-ebuild-gentoo.sh
