@@ -1,3 +1,15 @@
+## [v1.2.59] - 2026-10-12
+
+### Fixed
+- Match Plasma Panel behavior by hiding the Global Menu applet when its native
+  menu model is hidden, and release its dock slot when no menu is available.
+- Reserve native menu sizes and reflow neighbouring applets immediately when
+  the active window changes, avoiding delayed overlap during menu transitions.
+
+### Tests
+- Cover native Global Menu sizing, hidden-state handling, and synchronous
+  neighbour reflow in the QML smoke and source-contract tests.
+
 ## [v1.2.55] - 2026-10-04
 
 ### Fixed

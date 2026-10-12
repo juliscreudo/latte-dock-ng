@@ -40,7 +40,7 @@ let
   buildInputs = runtimeInputs ++ [ kdePackages.plasma-wayland-protocols ];
   package = stdenv.mkDerivation {
     pname = "latte-dock-ng";
-    version = "1.2.55";
+    version = "1.2.59";
 
     src = lib.cleanSource ./.;
 
