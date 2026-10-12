@@ -323,18 +323,18 @@ Item{
         property: "layoutLength"
         when: latteView
               && !appletItem.isAutoFillApplet
-              && (wrapper.zoomScale === 1 || appletItem.externalAppletUsesFixedSlotSizing || appletItem.isGlobalMenuApplet)
+              && (wrapper.zoomScale === 1 || appletItem.externalAppletUsesFixedSlotSizing || wrapper.appletItem.isGlobalMenuApplet)
         value: {
             // Global Menu's native Layout hints change with its model. Reserve
             // that length immediately, including short menus, instead of using
             // an icon slot until the delayed parabolic classifier catches up.
-            if (appletItem.isGlobalMenuApplet) {
-                var nativeLength = Math.max(0, appletMinimumLength, appletPreferredLength);
+            if (wrapper.appletItem.isGlobalMenuApplet) {
+                var nativeLength = Math.max(0, wrapper.appletMinimumLength, wrapper.appletPreferredLength);
                 // AppletQuickItem needs non-zero bootstrap geometry to create
                 // its representation and publish Layout hints. A zero slot here
                 // prevents that initialization; HiddenStatus still collapses
                 // the outer AppletItem once the native menu model is alive.
-                return nativeLength > 0 ? nativeLength : appletItem.metrics.iconSize;
+                return nativeLength > 0 ? nativeLength : wrapper.appletItem.metrics.iconSize;
             }
 
             //! Separators are a thin divider, not an icon-sized applet: keep
@@ -392,7 +392,7 @@ Item{
         value: {
             var blockParabolicEffectInLength = false;
 
-            if (appletItem.isGlobalMenuApplet) {
+            if (wrapper.appletItem.isGlobalMenuApplet) {
                 return true;
             }
 
@@ -665,7 +665,7 @@ Item{
         // Native menu layout and the dock Grid polish independently. Keep a
         // growing menu inside its reserved slot during that transient frame;
         // its QMenu popups are separate windows and remain unrestricted.
-        clip: appletItem.isGlobalMenuApplet
+        clip: wrapper.appletItem.isGlobalMenuApplet
         width: root.isHorizontal ? _length : _thickness
         height: root.isHorizontal ? _thickness : _length
         scale: appletItem.externalAppletUsesFixedSlotSizing ? wrapper.zoomScale : 1

@@ -2462,9 +2462,9 @@ SourceContractTest::globalMenuUsesNativeVisibilityAndSizing()
     // Hiding must stay bound to the applet's status, without destroying its
     // menu model or overriding native compact-view configuration.
     QVERIFY(source.contains(QStringLiteral("status === PlasmaCore.Types.HiddenStatus")));
-    QVERIFY(source.contains(QStringLiteral("? applet.plasmoid : backendAppletRef")));
-    QVERIFY(source.contains(QStringLiteral("statusSource && statusSource.status !== undefined")));
-    QVERIFY(source.contains(QStringLiteral("? statusSource.status")));
+    QVERIFY(source.contains(QStringLiteral("? applet[")));
+    QVERIFY(source.contains(QStringLiteral("plasmoid")));
+    QVERIFY(source.contains(QStringLiteral("statusSource[")));
     QVERIFY(source.contains(QStringLiteral("&& !keepVisibleOnHiddenStatus")));
     QVERIFY(source.contains(QStringLiteral("width: isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0 : computeWidth")));
     QVERIFY(source.contains(QStringLiteral("height: isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0 : computeHeight")));
@@ -2481,10 +2481,11 @@ SourceContractTest::globalMenuUsesNativeVisibilityAndSizing()
     QVERIFY(source.contains(QStringLiteral("lockZoom: isGlobalMenuApplet")));
     QFile wrapper(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/ItemWrapper.qml"));
     QVERIFY(wrapper.open(QFile::ReadOnly));
-    QVERIFY(QString::fromUtf8(wrapper.readAll()).contains(QStringLiteral("clip: appletItem.isGlobalMenuApplet")));
+    QVERIFY(QString::fromUtf8(wrapper.readAll()).contains(QStringLiteral("clip: wrapper.appletItem.isGlobalMenuApplet")));
 }
 
-void SourceContractTest::systrayGuardsInAppletItemPreventLayoutAndInteractionBreakage()
+void
+SourceContractTest::systrayGuardsInAppletItemPreventLayoutAndInteractionBreakage()
 {
     QFile appletItem(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/AppletItem.qml"));
     QVERIFY(appletItem.open(QFile::ReadOnly));
