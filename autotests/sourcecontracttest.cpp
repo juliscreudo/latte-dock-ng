@@ -2462,13 +2462,16 @@ SourceContractTest::globalMenuUsesNativeVisibilityAndSizing()
     // Hiding must stay bound to the applet's status, without destroying its
     // menu model or overriding native compact-view configuration.
     QVERIFY(source.contains(QStringLiteral("status === PlasmaCore.Types.HiddenStatus")));
-    QVERIFY(source.contains(QStringLiteral("? applet[")));
+    QVERIFY(source.contains(QStringLiteral("function readDynamicProperty(object, propertyName)")));
+    QVERIFY(source.contains(QStringLiteral("object[propertyName]")));
+    QVERIFY(source.contains(QStringLiteral("readDynamicProperty(applet, \"plasmoid\")")));
     QVERIFY(source.contains(QStringLiteral("plasmoid")));
-    QVERIFY(source.contains(QStringLiteral("statusSource[")));
+    QVERIFY(source.contains(QStringLiteral("readDynamicProperty(statusSource, \"status\")")));
     QVERIFY(source.contains(QStringLiteral("&& !keepVisibleOnHiddenStatus")));
     QVERIFY(source.contains(QStringLiteral("width: isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0 : computeWidth")));
     QVERIFY(source.contains(QStringLiteral("height: isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0 : computeHeight")));
     QVERIFY(source.contains(QStringLiteral("enabled: !isGlobalMenuApplet || !isHidden")));
+    QVERIFY(source.contains(QStringLiteral("forceLayout.call(parent)")));
     QVERIFY(!source.contains(QStringLiteral("configuration.compactView =")));
 
     QFile containment(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/main.qml"));

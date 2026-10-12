@@ -342,16 +342,25 @@ Item {
 
     property int previousIndex: -1
     property int spacersMaxSize: Math.max(0,Math.ceil(0.55 * metrics.iconSize) - metrics.totals.lengthEdges)
+
+    // Plasma applet wrappers expose backend members dynamically. Keeping the
+    // key indirect preserves that runtime contract without making qmllint
+    // treat these version-dependent members as missing QQuickItem properties.
+    function readDynamicProperty(object, propertyName) {
+        return object ? object[propertyName] : undefined;
+    }
+
     // Plasma 6 passes AppletQuickItem through containment applet signals, so
     // backendAppletRef can also be a visual item. Its plasmoid property owns
     // the notifying status; reading the wrapper leaves Global Menu at -1 and
     // shows its placeholder even when the native backend reports HiddenStatus.
     // Retain the direct-backend and visual fallbacks for older shell wrappers.
-    readonly property QtObject statusSource: applet && applet["plasmoid"] !== undefined && applet["plasmoid"]
-                                             ? applet["plasmoid"] : backendAppletRef
-    readonly property int status: statusSource && statusSource["status"] !== undefined
-                                  ? statusSource["status"]
-                                  : ((applet && applet["status"] !== undefined) ? applet["status"] : -1)
+    readonly property QtObject statusSource: applet && readDynamicProperty(applet, "plasmoid")
+                                             ? readDynamicProperty(applet, "plasmoid") : backendAppletRef
+    readonly property int status: statusSource && readDynamicProperty(statusSource, "status") !== undefined
+                                  ? readDynamicProperty(statusSource, "status")
+                                  : ((applet && readDynamicProperty(applet, "status") !== undefined)
+                                         ? readDynamicProperty(applet, "status") : -1)
 
     //! some metrics
     readonly property int appletMinimumLength: _wrapper.appletMinimumLength
@@ -509,8 +518,9 @@ Item {
     property bool globalMenuLayoutUpdating: false
 
     function syncGlobalMenuLayout() {
+        var forceLayout = readDynamicProperty(parent, "forceLayout");
         if (!isGlobalMenuApplet || globalMenuLayoutUpdating || !parent
-                || typeof parent["forceLayout"] !== "function") {
+                || typeof forceLayout !== "function") {
             return;
         }
 
@@ -519,7 +529,7 @@ Item {
         // neighbouring icons agree before painting. Guard geometry feedback
         // from nested size notifications while the positioner is updating.
         globalMenuLayoutUpdating = true;
-        parent["forceLayout"]();
+        forceLayout.call(parent);
         globalMenuLayoutUpdating = false;
     }
 

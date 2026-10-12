@@ -1165,6 +1165,9 @@ void QmlSmokeTest::globalMenuBackendStatusTransitionsLoadFromSource()
     QFile file(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/AppletItem.qml"));
     QVERIFY(file.open(QFile::ReadOnly));
     const QString source = QString::fromUtf8(file.readAll());
+    const int dynamicPropertyStart = source.indexOf(QStringLiteral("    function readDynamicProperty(object, propertyName)"));
+    const int dynamicPropertyEnd = source.indexOf(QStringLiteral("    // Plasma 6 passes"), dynamicPropertyStart);
+    QVERIFY(dynamicPropertyStart >= 0 && dynamicPropertyEnd > dynamicPropertyStart);
     QString bindings;
     // Execute the production bindings with a Plasma 6-style visual item that
     // has no status property. The backend owns the notifying status instead.
@@ -1210,7 +1213,8 @@ Item {
     function hideMenu() { nativeBackend.status = PlasmaCore.Types.HiddenStatus; }
     function showMenu() { nativeBackend.status = PlasmaCore.Types.ActiveStatus; }
     function openMenu() { nativeBackend.status = PlasmaCore.Types.NeedsAttentionStatus; }
-)") + backend + bindings.toUtf8() + QByteArrayLiteral("\n}");
+)") + source.mid(dynamicPropertyStart, dynamicPropertyEnd - dynamicPropertyStart).toUtf8() + backend
+                               + bindings.toUtf8() + QByteArrayLiteral("\n}");
     auto object = createQmlObject(engine, harness, QUrl(QStringLiteral("qrc:/global-menu-status.qml")));
     QVERIFY(object);
     QCOMPARE(object->property("isHidden").toBool(), false);
@@ -1292,9 +1296,12 @@ QmlSmokeTest::globalMenuReflowsNeighboursSynchronously()
     const QString source = QString::fromUtf8(file.readAll());
     const int fillStart = source.indexOf(QStringLiteral("    property bool isRequestingFill:"));
     const int fillEnd = source.indexOf(QStringLiteral("    property int maxAutoFillLength:"), fillStart);
+    const int dynamicPropertyStart = source.indexOf(QStringLiteral("    function readDynamicProperty(object, propertyName)"));
+    const int dynamicPropertyEnd = source.indexOf(QStringLiteral("    // Plasma 6 passes"), dynamicPropertyStart);
     const int layoutStart = source.indexOf(QStringLiteral("    property bool globalMenuLayoutUpdating:"));
     const int layoutEnd = source.indexOf(QStringLiteral("    //when the applet moves"), layoutStart);
     QVERIFY(fillStart >= 0 && fillEnd > fillStart);
+    QVERIFY(dynamicPropertyStart >= 0 && dynamicPropertyEnd > dynamicPropertyStart);
     QVERIFY(layoutStart >= 0 && layoutEnd > layoutStart);
     const QByteArray harness = QByteArrayLiteral(R"(
 import QtQuick
@@ -1324,6 +1331,7 @@ Grid {
             Layout.fillHeight: true
         }
 )") + source.mid(fillStart, fillEnd - fillStart).toUtf8() +
+                               source.mid(dynamicPropertyStart, dynamicPropertyEnd - dynamicPropertyStart).toUtf8() +
                                source.mid(layoutStart, layoutEnd - layoutStart).toUtf8() + QByteArrayLiteral("\n}\nItem { id: nextItem; width: 48; height: 48 }\n}");
     QQmlEngine engine;
     auto object = createQmlObject(engine, harness, QUrl(QStringLiteral("qrc:/global-menu-reflow.qml")));
