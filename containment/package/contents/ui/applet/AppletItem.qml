@@ -35,8 +35,12 @@ Item {
     readonly property var isSeparatorReference: isSeparator
     readonly property var isMarginsAreaSeparatorReference: isMarginsAreaSeparator
     readonly property var isInternalViewSplitterReference: isInternalViewSplitter
-    width: isInternalViewSplitter ? 0 : computeWidth
-    height: isInternalViewSplitter ? 0 : computeHeight
+    // Opacity hides applets without resetting their internal state, but Flow
+    // still reserves their geometry. An unavailable Global Menu must consume
+    // no slot and receive no input while its native model remains alive.
+    width: isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0 : computeWidth
+    height: isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0 : computeHeight
+    enabled: !isGlobalMenuApplet || !isHidden
     z: isSortDragging ? 1600 : ((externalAppletDrawsAboveTasks && !isSystray) ? 1000 : 0)
 
     // Prevent external applets from rendering beyond their allocated slot
@@ -102,7 +106,13 @@ Item {
     readonly property bool externalAppletDrawsAboveTasks: isExternalPlasmaApplet
                                                           && !isSeparator
                                                           && !isSpacer
-    readonly property bool keepVisibleOnHiddenStatus: externalAppletDrawsAboveTasks
+    readonly property bool isGlobalMenuApplet: pluginName === "org.kde.plasma.appmenu"
+    // Global Menu owns menu availability through Plasmoid.status. In its
+    // menu-bar mode HiddenStatus means the active window has no menus; keeping
+    // it visible exposes the native "Global Menu" placeholder instead of
+    // collapsing the slot as Plasma panels do. Keep the applet alive so its
+    // status binding can restore the menus when the active window changes.
+    readonly property bool keepVisibleOnHiddenStatus: externalAppletDrawsAboveTasks && !isGlobalMenuApplet
     readonly property bool externalAppletHasStableNativeSizing: applet
                                                                && applet.Layout
                                                                && applet.Layout.preferredWidth > 0
@@ -119,8 +129,11 @@ Item {
     //! discoverable icon / stable native sizing (e.g. the Application Menu,
     //! the Trash widget): reflowing those during hover collapses their slot
     //! and makes the icon vanish, so they must not use the layout-growth path.
+    //! Global Menu changes length with the active window: its native Layout
+    //! hints must remain authoritative, or a cached icon slot clips the menus.
     readonly property bool externalAppletUsesFixedSlotSizing: externalAppletDrawsAboveTasks
                                                              && !isSystray
+                                                             && !isGlobalMenuApplet
                                                              && (isApplicationLauncherApplet
                                                                  || (!communicator.appletMainIconIsFound
                                                                      && !externalAppletHasStableNativeSizing))
@@ -188,7 +201,7 @@ Item {
     property real sortDragLastX: 0
     property real sortDragLastY: 0
     property bool isHidden: ((applet
-                             && applet.status === PlasmaCore.Types.HiddenStatus
+                             && status === PlasmaCore.Types.HiddenStatus
                              && !keepVisibleOnHiddenStatus)
                             || isInternalViewSplitter)
                             || isScheduledForDestruction
@@ -318,7 +331,16 @@ Item {
 
     property int previousIndex: -1
     property int spacersMaxSize: Math.max(0,Math.ceil(0.55 * metrics.iconSize) - metrics.totals.lengthEdges)
-    property int status: (applet && applet.status !== undefined) ? applet.status : -1
+    // Plasma 6 passes AppletQuickItem through containment applet signals, so
+    // backendAppletRef can also be a visual item. Its plasmoid property owns
+    // the notifying status; reading the wrapper leaves Global Menu at -1 and
+    // shows its placeholder even when the native backend reports HiddenStatus.
+    // Retain the direct-backend and visual fallbacks for older shell wrappers.
+    readonly property QtObject statusSource: applet && applet.plasmoid !== undefined && applet.plasmoid
+                                             ? applet.plasmoid : backendAppletRef
+    readonly property int status: statusSource && statusSource.status !== undefined
+                                  ? statusSource.status
+                                  : ((applet && applet.status !== undefined) ? applet.status : -1)
 
     //! some metrics
     readonly property int appletMinimumLength: _wrapper.appletMinimumLength

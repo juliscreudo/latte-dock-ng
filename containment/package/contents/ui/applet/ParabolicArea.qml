@@ -205,7 +205,7 @@ Item {
         if(appletItem && (appletItem.index === nIndex) /*&& !appletItem.containsMouse*/){ /*disable it in order to increase parabolic effect responsiveness*/
             if ((parabolicEffectIsSupported && !appletItem.originalAppletBehavior && !appletItem.communicator.indexerIsSupported)
                     && applet
-                    && (applet.status !== PlasmaCore.Types.HiddenStatus || appletItem.keepVisibleOnHiddenStatus)
+                    && (appletItem.status !== PlasmaCore.Types.HiddenStatus || appletItem.keepVisibleOnHiddenStatus)
                     && !appletItem.appletZoomIsLocked) {
                 wrapper.zoomScale = Math.max(1, nScale);
             }

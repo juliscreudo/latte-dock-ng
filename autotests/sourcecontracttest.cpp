@@ -22,6 +22,7 @@ private Q_SLOTS:
     void plasmaVolumeBootstrapContractMovedToQmlSmokeTest();
     void compactAppletPopupSizingContractMovedToQmlSmokeTest();
     void applicationLauncherUsesFixedExternalSlot();
+    void globalMenuUsesNativeVisibilityAndSizing();
     void widgetsZoomCanBeDisabledIndependently();
     void animationsSpeedFactorMapsToDurationMultipliers();
     void effectsConfigAnimationButtonsMatchDurationValues();
@@ -2443,6 +2444,40 @@ void SourceContractTest::scrollToggleMinimizedUsesAllScreensTrackerForMinimizeAn
         QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/layouts/EnvironmentActions.qml"));
 }
 
+void SourceContractTest::globalMenuUsesNativeVisibilityAndSizing()
+{
+    QFile appletItem(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/AppletItem.qml"));
+    QVERIFY(appletItem.open(QFile::ReadOnly));
+    const QString source = QString::fromUtf8(appletItem.readAll());
+
+    QVERIFY(source.contains(QStringLiteral("isGlobalMenuApplet: pluginName === \"org.kde.plasma.appmenu\"")));
+    QVERIFY(source.contains(QStringLiteral("keepVisibleOnHiddenStatus: externalAppletDrawsAboveTasks && !isGlobalMenuApplet")));
+    const int fixedSlotStart = source.indexOf(QStringLiteral("externalAppletUsesFixedSlotSizing:"));
+    const int fixedSlotEnd = source.indexOf(QStringLiteral("property bool appletBlocksParabolicEffect"), fixedSlotStart);
+    QVERIFY(fixedSlotStart >= 0);
+    QVERIFY(fixedSlotEnd > fixedSlotStart);
+    QVERIFY(source.mid(fixedSlotStart, fixedSlotEnd - fixedSlotStart).contains(QStringLiteral("&& !isGlobalMenuApplet")));
+
+    // Hiding must stay bound to the applet's status, without destroying its
+    // menu model or overriding native compact-view configuration.
+    QVERIFY(source.contains(QStringLiteral("status === PlasmaCore.Types.HiddenStatus")));
+    QVERIFY(source.contains(QStringLiteral("? applet.plasmoid : backendAppletRef")));
+    QVERIFY(source.contains(QStringLiteral("statusSource && statusSource.status !== undefined")));
+    QVERIFY(source.contains(QStringLiteral("? statusSource.status")));
+    QVERIFY(source.contains(QStringLiteral("&& !keepVisibleOnHiddenStatus")));
+    QVERIFY(source.contains(QStringLiteral("width: isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0 : computeWidth")));
+    QVERIFY(source.contains(QStringLiteral("height: isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0 : computeHeight")));
+    QVERIFY(source.contains(QStringLiteral("enabled: !isGlobalMenuApplet || !isHidden")));
+    QVERIFY(!source.contains(QStringLiteral("configuration.compactView =")));
+
+    QFile containment(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/main.qml"));
+    QVERIFY(containment.open(QFile::ReadOnly));
+    QVERIFY(QString::fromUtf8(containment.readAll()).contains(QStringLiteral("appletContainer.status !== PlasmaCore.Types.HiddenStatus")));
+    QFile parabolicArea(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/ParabolicArea.qml"));
+    QVERIFY(parabolicArea.open(QFile::ReadOnly));
+    QVERIFY(QString::fromUtf8(parabolicArea.readAll()).contains(QStringLiteral("appletItem.status !== PlasmaCore.Types.HiddenStatus")));
+}
+
 void SourceContractTest::systrayGuardsInAppletItemPreventLayoutAndInteractionBreakage()
 {
     QFile appletItem(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/AppletItem.qml"));
@@ -2996,7 +3031,7 @@ void SourceContractTest::appletItemInternalViewSplitterAndSortDragGuards()
     const QString src = QString::fromUtf8(appletItem.readAll());
 
     // isInternalViewSplitter must force width/height to 0.
-    QVERIFY(src.contains(QStringLiteral("isInternalViewSplitter ? 0")));
+    QVERIFY(src.contains(QStringLiteral("isInternalViewSplitter || (isGlobalMenuApplet && isHidden) ? 0")));
 
     // pluginName must return org.kde.latte.splitter for internal splitters.
     QVERIFY(src.contains(QStringLiteral("\"org.kde.latte.splitter\"")));

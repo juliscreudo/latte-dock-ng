@@ -69,6 +69,8 @@ private Q_SLOTS:
     void taskRemovalDefersGeometryFeedback_data();
     void taskRemovalDefersGeometryFeedback();
     void compactAppletPopupSizingLoadsFromSource();
+    void globalMenuBackendStatusTransitionsLoadFromSource();
+    void globalMenuBackendStatusTransitionsLoadFromSource_data();
     void launchersGeometryRestoreSchedulingLoadsFromSource();
     void plasmaVolumeBootstrapLoadsFromSource();
     void taskMouseAreaAllClickActionsPresent();
@@ -812,7 +814,7 @@ singleton Types 2.0 Types.qml
 pragma Singleton
 import QtQml 2.15
 QtObject {
-    enum Types { TopEdge, LeftEdge, BottomEdge, RightEdge, Horizontal, Vertical }
+    enum Types { TopEdge, LeftEdge, BottomEdge, RightEdge, Horizontal, Vertical, HiddenStatus, ActiveStatus, NeedsAttentionStatus }
 }
 )"));
 
@@ -1146,6 +1148,86 @@ ListView {
         QCOMPARE(events.addCount(), 1);
     }
     QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(QLatin1Char('\n'))));
+}
+
+void QmlSmokeTest::globalMenuBackendStatusTransitionsLoadFromSource_data()
+{
+    QTest::addColumn<bool>("wrappedBackend");
+    QTest::newRow("direct-backend") << false;
+    QTest::newRow("plasmoid-backend") << true;
+}
+
+void QmlSmokeTest::globalMenuBackendStatusTransitionsLoadFromSource()
+{
+    QFETCH(bool, wrappedBackend);
+    QFile file(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/AppletItem.qml"));
+    QVERIFY(file.open(QFile::ReadOnly));
+    const QString source = QString::fromUtf8(file.readAll());
+    QString bindings;
+    // Execute the production bindings with a Plasma 6-style visual item that
+    // has no status property. The backend owns the notifying status instead.
+    for (const QString &prefix : {QStringLiteral("width:"), QStringLiteral("height:"), QStringLiteral("enabled:"),
+                                  QStringLiteral("readonly property bool isGlobalMenuApplet:"),
+                                  QStringLiteral("readonly property bool keepVisibleOnHiddenStatus:"),
+                                  QStringLiteral("property bool isHidden:"), QStringLiteral("readonly property QtObject statusSource:"),
+                                  QStringLiteral("readonly property int status:")}) {
+        const int start = source.indexOf(QStringLiteral("\n    ") + prefix);
+        QVERIFY(start >= 0);
+        if (prefix != QStringLiteral("property bool isHidden:") && prefix != QStringLiteral("readonly property int status:")
+            && prefix != QStringLiteral("readonly property QtObject statusSource:")) {
+            const int end = source.indexOf(QLatin1Char('\n'), start + 1);
+            QVERIFY(end > start);
+            bindings += source.mid(start, end - start);
+            continue;
+        }
+        const QRegularExpression nextDeclaration(QStringLiteral("\n    (?:readonly )?property |\n\n"));
+        const auto end = nextDeclaration.match(source, start + 1);
+        QVERIFY(end.hasMatch());
+        bindings += source.mid(start, end.capturedStart() - start);
+    }
+
+    QTemporaryDir importRoot;
+    QQmlEngine engine;
+    addFakePlasmaCoreImport(engine, importRoot);
+    const QByteArray backend = wrappedBackend
+        ? QByteArrayLiteral("property QtObject applet: QtObject { property QtObject plasmoid: nativeBackend }\nproperty QtObject backendAppletRef: applet\n")
+        : QByteArrayLiteral("property QtObject applet: QtObject {}\nproperty QtObject backendAppletRef: nativeBackend\n");
+    const QByteArray harness = QByteArrayLiteral(R"(
+import QtQuick
+import org.kde.plasma.core 2.0 as PlasmaCore
+Item {
+    property string pluginName: "org.kde.plasma.appmenu"
+    property bool externalAppletDrawsAboveTasks: true
+    property bool isInternalViewSplitter: false
+    property bool isScheduledForDestruction: false
+    property real computeWidth: 360
+    property real computeHeight: 48
+    property QtObject nativeBackend: QtObject {
+        property int status: PlasmaCore.Types.ActiveStatus
+    }
+    function hideMenu() { nativeBackend.status = PlasmaCore.Types.HiddenStatus; }
+    function showMenu() { nativeBackend.status = PlasmaCore.Types.ActiveStatus; }
+    function openMenu() { nativeBackend.status = PlasmaCore.Types.NeedsAttentionStatus; }
+)") + backend + bindings.toUtf8() + QByteArrayLiteral("\n}");
+    auto object = createQmlObject(engine, harness, QUrl(QStringLiteral("qrc:/global-menu-status.qml")));
+    QVERIFY(object);
+    QCOMPARE(object->property("isHidden").toBool(), false);
+    QCOMPARE(object->property("width").toReal(), 360.0);
+    QVERIFY(QMetaObject::invokeMethod(object.get(), "hideMenu"));
+    QCOMPARE(object->property("isHidden").toBool(), true);
+    QCOMPARE(object->property("width").toReal(), 0.0);
+    QCOMPARE(object->property("height").toReal(), 0.0);
+    QCOMPARE(object->property("enabled").toBool(), false);
+    QVERIFY(QMetaObject::invokeMethod(object.get(), "showMenu"));
+    QCOMPARE(object->property("isHidden").toBool(), false);
+    QCOMPARE(object->property("width").toReal(), 360.0);
+    QCOMPARE(object->property("height").toReal(), 48.0);
+    QCOMPARE(object->property("enabled").toBool(), true);
+    QVERIFY(QMetaObject::invokeMethod(object.get(), "openMenu"));
+    QCOMPARE(object->property("isHidden").toBool(), false);
+    QVERIFY(object->setProperty("pluginName", QStringLiteral("org.kde.plasma.kickoff")));
+    QVERIFY(QMetaObject::invokeMethod(object.get(), "hideMenu"));
+    QCOMPARE(object->property("isHidden").toBool(), false);
 }
 
 void QmlSmokeTest::compactAppletPopupSizingLoadsFromSource()

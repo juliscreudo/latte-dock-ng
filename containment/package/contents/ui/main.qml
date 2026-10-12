@@ -842,7 +842,7 @@ ContainmentItem {
 
     function appletContainerShouldBeVisible(appletContainer) {
         return (appletContainer.applet
-                && (appletContainer.applet.status !== PlasmaCore.Types.HiddenStatus
+                && (appletContainer.status !== PlasmaCore.Types.HiddenStatus
                     || appletContainer.keepVisibleOnHiddenStatus))
                && !appletContainer.isHidden;
     }
