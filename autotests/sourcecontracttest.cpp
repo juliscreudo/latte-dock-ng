@@ -2444,7 +2444,8 @@ void SourceContractTest::scrollToggleMinimizedUsesAllScreensTrackerForMinimizeAn
         QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/layouts/EnvironmentActions.qml"));
 }
 
-void SourceContractTest::globalMenuUsesNativeVisibilityAndSizing()
+void
+SourceContractTest::globalMenuUsesNativeVisibilityAndSizing()
 {
     QFile appletItem(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/AppletItem.qml"));
     QVERIFY(appletItem.open(QFile::ReadOnly));
@@ -2476,6 +2477,11 @@ void SourceContractTest::globalMenuUsesNativeVisibilityAndSizing()
     QFile parabolicArea(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/ParabolicArea.qml"));
     QVERIFY(parabolicArea.open(QFile::ReadOnly));
     QVERIFY(QString::fromUtf8(parabolicArea.readAll()).contains(QStringLiteral("appletItem.status !== PlasmaCore.Types.HiddenStatus")));
+
+    QVERIFY(source.contains(QStringLiteral("lockZoom: isGlobalMenuApplet")));
+    QFile wrapper(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/ItemWrapper.qml"));
+    QVERIFY(wrapper.open(QFile::ReadOnly));
+    QVERIFY(QString::fromUtf8(wrapper.readAll()).contains(QStringLiteral("clip: appletItem.isGlobalMenuApplet")));
 }
 
 void SourceContractTest::systrayGuardsInAppletItemPreventLayoutAndInteractionBreakage()

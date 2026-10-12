@@ -79,6 +79,13 @@ Item {
             return false;
         }
 
+        // The native menu representation can request fillWidth/fillHeight,
+        // but the dock must reserve its content length rather than route it
+        // through deferred shared-space allocation when the active app changes.
+        if (isGlobalMenuApplet) {
+            return false;
+        }
+
         // In modern dock style, task applets must not keep panel-like fill slots.
         // Otherwise, after Justify -> Center transitions they can remain visually
         // left-aligned inside an oversized reserved width.
@@ -138,7 +145,11 @@ Item {
                                                                  || (!communicator.appletMainIconIsFound
                                                                      && !externalAppletHasStableNativeSizing))
     property bool appletBlocksParabolicEffect: communicator.requires.parabolicEffectLocked
-    readonly property bool lockZoom: !parabolicEffectIsSupported
+    // A native menu bar changes size with the active window. Do not wait for
+    // the 100ms icon-size classifier or a parabolic animation to settle before
+    // reserving its new length; that leaves menus over neighbouring icons.
+    readonly property bool lockZoom: isGlobalMenuApplet
+                                     || !parabolicEffectIsSupported
                                      || appletBlocksParabolicEffect
                                      || (fastLayoutManager && applet && (fastLayoutManager.lockedZoomApplets.indexOf(applet.id)>=0))
 
@@ -494,6 +505,35 @@ Item {
 
 
     //// BEGIN :: Animate Applet when a new applet is dragged in the view
+
+    property bool globalMenuLayoutUpdating: false
+
+    function syncGlobalMenuLayout() {
+        if (!isGlobalMenuApplet || globalMenuLayoutUpdating || !parent
+                || typeof parent.forceLayout !== "function") {
+            return;
+        }
+
+        // Grid normally positions children during polish, after the native
+        // menu has changed width. Reflow immediately so its new slot and the
+        // neighbouring icons agree before painting. Guard geometry feedback
+        // from nested size notifications while the positioner is updating.
+        globalMenuLayoutUpdating = true;
+        parent.forceLayout();
+        globalMenuLayoutUpdating = false;
+    }
+
+    onWidthChanged: {
+        if (root.isHorizontal) {
+            syncGlobalMenuLayout();
+        }
+    }
+
+    onHeightChanged: {
+        if (root.isVertical) {
+            syncGlobalMenuLayout();
+        }
+    }
 
     //when the applet moves caused by its resize, don't animate.
     //this is completely heuristic, but looks way less "jumpy"

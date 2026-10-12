@@ -71,6 +71,8 @@ private Q_SLOTS:
     void compactAppletPopupSizingLoadsFromSource();
     void globalMenuBackendStatusTransitionsLoadFromSource();
     void globalMenuBackendStatusTransitionsLoadFromSource_data();
+    void globalMenuNativeLengthUpdatesWithoutClassifier();
+    void globalMenuReflowsNeighboursSynchronously();
     void launchersGeometryRestoreSchedulingLoadsFromSource();
     void plasmaVolumeBootstrapLoadsFromSource();
     void taskMouseAreaAllClickActionsPresent();
@@ -1230,7 +1232,124 @@ Item {
     QCOMPARE(object->property("isHidden").toBool(), false);
 }
 
-void QmlSmokeTest::compactAppletPopupSizingLoadsFromSource()
+void
+QmlSmokeTest::globalMenuNativeLengthUpdatesWithoutClassifier()
+{
+    QFile file(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/ItemWrapper.qml"));
+    QVERIFY(file.open(QFile::ReadOnly));
+    const QString source = QString::fromUtf8(file.readAll());
+    const int lengthProperty = source.indexOf(QStringLiteral("property: \"layoutLength\""));
+    QVERIFY(lengthProperty >= 0);
+    const int start = source.lastIndexOf(QStringLiteral("    Binding {"), lengthProperty);
+    const int end = source.indexOf(QStringLiteral("    Binding {"), lengthProperty);
+    QVERIFY(start >= 0);
+    QVERIFY(end > start);
+    const QByteArray harness = QByteArrayLiteral(R"(
+import QtQuick
+Item {
+    id: wrapper
+    property bool latteView: true
+    property real zoomScale: 1.5
+    property real layoutLength: 0
+    property real appletMinimumLength: 24
+    property real appletPreferredLength: -1
+    property real appletMaximumLength: Infinity
+    property bool isSeparator: false
+    property var applet: ({})
+    property QtObject appletItem: QtObject {
+        property bool isGlobalMenuApplet: true
+        property bool isAutoFillApplet: false
+        property bool externalAppletUsesFixedSlotSizing: false
+        property bool originalAppletBehavior: false
+        property QtObject metrics: QtObject { property int iconSize: 48 }
+    }
+)") + source.mid(start, end - start).toUtf8() +
+                               QByteArrayLiteral("\n}");
+    QQmlEngine engine;
+    auto object = createQmlObject(engine, harness, QUrl(QStringLiteral("qrc:/global-menu-length.qml")));
+    QVERIFY(object);
+    // Even with an unsettled zoom scale, short and long native menus update
+    // synchronously without the 100ms icon-size classification timer.
+    QCOMPARE(object->property("layoutLength").toReal(), 24.0);
+    QVERIFY(object->setProperty("appletMinimumLength", 420.0));
+    QCOMPARE(object->property("layoutLength").toReal(), 420.0);
+    QVERIFY(object->setProperty("appletMinimumLength", 30.0));
+    QCOMPARE(object->property("layoutLength").toReal(), 30.0);
+    QVERIFY(object->setProperty("appletPreferredLength", 80.0));
+    QCOMPARE(object->property("layoutLength").toReal(), 80.0);
+    QVERIFY(object->setProperty("appletPreferredLength", -1.0));
+    QVERIFY(object->setProperty("appletMinimumLength", 0.0));
+    // Before AppletQuickItem creates its representation, it has no native
+    // size hints. Keep non-zero bootstrap geometry so initialization can run.
+    QCOMPARE(object->property("layoutLength").toReal(), 48.0);
+}
+
+void
+QmlSmokeTest::globalMenuReflowsNeighboursSynchronously()
+{
+    QFile file(QStringLiteral(LATTE_SOURCE_DIR "/containment/package/contents/ui/applet/AppletItem.qml"));
+    QVERIFY(file.open(QFile::ReadOnly));
+    const QString source = QString::fromUtf8(file.readAll());
+    const int fillStart = source.indexOf(QStringLiteral("    property bool isRequestingFill:"));
+    const int fillEnd = source.indexOf(QStringLiteral("    property int maxAutoFillLength:"), fillStart);
+    const int layoutStart = source.indexOf(QStringLiteral("    property bool globalMenuLayoutUpdating:"));
+    const int layoutEnd = source.indexOf(QStringLiteral("    //when the applet moves"), layoutStart);
+    QVERIFY(fillStart >= 0 && fillEnd > fillStart);
+    QVERIFY(layoutStart >= 0 && layoutEnd > layoutStart);
+    const QByteArray harness = QByteArrayLiteral(R"(
+import QtQuick
+import QtQuick.Layouts
+Grid {
+    id: container
+    columns: 99999
+    rows: 99999
+    flow: root.isHorizontal ? Grid.LeftToRight : Grid.TopToBottom
+    property QtObject root: QtObject {
+        property bool isHorizontal: true
+        property bool isVertical: !isHorizontal
+        property bool isModernDockStyle: false
+    }
+    property alias menu: menuItem
+    property alias neighbour: nextItem
+    Item {
+        id: menuItem
+        width: 80
+        height: 40
+        property QtObject root: container.root
+        property bool isGlobalMenuApplet: true
+        property bool indexerIsSupported: false
+        property bool isHidden: false
+        property Item applet: Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+)") + source.mid(fillStart, fillEnd - fillStart).toUtf8() +
+                               source.mid(layoutStart, layoutEnd - layoutStart).toUtf8() + QByteArrayLiteral("\n}\nItem { id: nextItem; width: 48; height: 48 }\n}");
+    QQmlEngine engine;
+    auto object = createQmlObject(engine, harness, QUrl(QStringLiteral("qrc:/global-menu-reflow.qml")));
+    QVERIFY(object);
+    QObject *menu = object->property("menu").value<QObject *>();
+    QObject *neighbour = object->property("neighbour").value<QObject *>();
+    QVERIFY(menu && neighbour);
+    QVERIFY(QMetaObject::invokeMethod(object.get(), "forceLayout"));
+    QCOMPARE(menu->property("isRequestingFill").toBool(), false);
+    QVERIFY(menu->setProperty("width", 500.0));
+    QCOMPARE(neighbour->property("x").toReal(), 500.0);
+    QVERIFY(menu->setProperty("width", 0.0));
+    QCOMPARE(neighbour->property("x").toReal(), 0.0);
+    QVERIFY(menu->setProperty("width", 150.0));
+    QCOMPARE(neighbour->property("x").toReal(), 150.0);
+    QObject *root = object->property("root").value<QObject *>();
+    QVERIFY(root);
+    QVERIFY(root->setProperty("isHorizontal", false));
+    QVERIFY(menu->setProperty("height", 300.0));
+    QCOMPARE(neighbour->property("y").toReal(), 300.0);
+    QVERIFY(menu->setProperty("height", 0.0));
+    QCOMPARE(neighbour->property("y").toReal(), 0.0);
+}
+
+void
+QmlSmokeTest::compactAppletPopupSizingLoadsFromSource()
 {
     QTemporaryDir importRoot;
     QQmlEngine engine;
