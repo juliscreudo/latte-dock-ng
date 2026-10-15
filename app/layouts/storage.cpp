@@ -25,6 +25,7 @@
 #include <QFileInfo>
 #include <QSet>
 #include <QLatin1String>
+#include <QPointer>
 
 // KDE
 #include <KConfigGroup>
@@ -37,6 +38,7 @@
 #include <Plasma/Plasma>
 #include <Plasma/Applet>
 #include <Plasma/Containment>
+#include <Plasma/Corona>
 
 namespace Latte {
 namespace Layouts {
@@ -626,10 +628,112 @@ void Storage::moveToLayoutFile(const QString &layoutName)
     removeAllClonedViews(layoutFilePath);
 }
 
+#ifdef LATTE_PLASMA_STORED_CONTAINMENT_SCREEN
+//! libplasma 6.8 removed Corona::importLayout(), the only API that restored
+//! containments with the ids stored in a layout file. This follows the public
+//! recipe Plasma uses itself (ShellCorona::setContainmentTypeForScreen()):
+//! create delayed, copy the configuration, then init and restore. Plasma
+//! assigns new ids, so every containment is created before any is restored
+//! and sub-containment references (e.g. SystrayContainmentId) are rewritten
+//! to the new ids first; otherwise the 6.8 system tray migration would copy
+//! a missing or unrelated containment group and lose its applets. That
+//! migration deletes the legacy inner containment while its parent applet is
+//! restored, hence the QPointer guard.
+QList<Plasma::Containment *> Storage::importContainmentsToCorona(Latte::Corona *corona, const KSharedConfigPtr &filePtr)
+{
+    QList<Plasma::Containment *> newContainments;
+
+    if (!corona) {
+        return newContainments;
+    }
+
+    KConfigGroup fileContainments(filePtr, QStringLiteral("Containments"));
+    QStringList groups = fileContainments.groupList();
+    std::sort(groups.begin(), groups.end());
+
+    QHash<QString, QString> assigned;
+    QList<QPair<QString, QPointer<Plasma::Containment>>> created;
+
+    for (const auto &cId : std::as_const(groups)) {
+        KConfigGroup containmentGroup = fileContainments.group(cId);
+
+        if (containmentGroup.entryMap().isEmpty()) {
+            continue;
+        } else if (containmentGroup.readEntry(QStringLiteral("transient"), false)) {
+            containmentGroup.deleteGroup();
+            continue;
+        }
+
+        Plasma::Containment *containment = corona->createContainmentForImport(containmentGroup.readEntry(QStringLiteral("plugin"), QString()));
+
+        if (!containment) {
+            qCWarning(latteLayout) << "Containment could not be created while importing layout, id:" << cId;
+            continue;
+        }
+
+        assigned[cId] = QString::number(containment->id());
+        created << qMakePair(cId, QPointer<Plasma::Containment>(containment));
+    }
+
+    KConfigGroup coronaContainments(corona->config(), QStringLiteral("Containments"));
+
+    for (const auto &entry : std::as_const(created)) {
+        KConfigGroup coronaGroup(&coronaContainments, assigned[entry.first]);
+        coronaGroup.deleteGroup();
+        fileContainments.group(entry.first).copyTo(&coronaGroup);
+
+        KConfigGroup applets = coronaGroup.group(QStringLiteral("Applets"));
+
+        for (const auto &appletId : applets.groupList()) {
+            KConfigGroup appletGroup = applets.group(appletId);
+            const QString subId = QString::number(subContainmentId(appletGroup));
+            const int entityIndex = subIdentityIndex(appletGroup);
+
+            if (!assigned.contains(subId) || entityIndex < 0 || m_subIdentities[entityIndex].cfgProperty.isEmpty()) {
+                continue;
+            }
+
+            KConfigGroup subIdentityGroup = appletGroup;
+
+            if (!m_subIdentities[entityIndex].cfgGroup.isEmpty()) {
+                subIdentityGroup = appletGroup.group(m_subIdentities[entityIndex].cfgGroup);
+            }
+
+            subIdentityGroup.writeEntry(m_subIdentities[entityIndex].cfgProperty, assigned[subId]);
+        }
+    }
+
+    for (const auto &entry : std::as_const(created)) {
+        Plasma::Containment *containment = entry.second;
+
+        if (!containment) {
+            continue;
+        }
+
+        containment->init();
+        KConfigGroup cg = containment->config();
+        containment->restore(cg);
+        containment->updateConstraints(Plasma::Applet::StartupCompletedConstraint);
+        containment->save(cg);
+        corona->requestConfigSync();
+        containment->flushPendingConstraintsEvents();
+        Q_EMIT corona->containmentAdded(containment);
+
+        newContainments << containment;
+    }
+
+    return newContainments;
+}
+#endif
+
 QList<Plasma::Containment *> Storage::importLayoutFile(const Layout::GenericLayout *layout, QString file)
 {
     KSharedConfigPtr filePtr = KSharedConfig::openConfig(file);
+#ifdef LATTE_PLASMA_STORED_CONTAINMENT_SCREEN
+    auto newContainments = importContainmentsToCorona(layout->corona(), filePtr);
+#else
     auto newContainments = layout->corona()->importLayout(KConfigGroup(filePtr, QString()));
+#endif
 
     QList<Plasma::Containment *> importedViews;
 
@@ -721,6 +825,11 @@ Data::View Storage::newView(const Layout::GenericLayout *destinationLayout, cons
             qWarning() << "the requested containment plugin can not be located or loaded from:" << templateFile;
             return Data::View();
         }
+
+#ifdef LATTE_PLASMA_STORED_CONTAINMENT_SCREEN
+        //! Plasma 6.8 assigns a new id while importing, see importContainmentsToCorona().
+        updatedNextViews[0].id = QString::number(newContainment->id());
+#endif
     } else {
         //! import views for inactive layout
         importContainments(temp2File, destinationLayout->file());
@@ -1610,7 +1719,7 @@ Data::View Storage::view(const Layout::GenericLayout *layout, const Plasma::Cont
     vdata.screen = lattecontainment->screen();
 
     if (!isValid(vdata.screen)) {
-        vdata.screen = lattecontainment->lastScreen();
+        vdata.screen = containmentLastScreen(lattecontainment);
     }
 
     vdata.subcontainments = subcontainments(layout, lattecontainment);

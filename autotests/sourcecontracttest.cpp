@@ -75,6 +75,7 @@ private Q_SLOTS:
     void cmakeFindsQtCoreToolsBeforeKdeInstallDirs();
     void qtQuickGpuPreferenceKeepsSoftwareFallbackAvailable();
     void knsCompatImportsAreAvailableForSystemInstall();
+    void plasma68ContainmentScreenAndImportContracts();
     void layerShellSetScreenGuardPreventsBuildRegression();
     void genericLayoutUnloadUsesSynchronousDelete();
     void synchronizerUnloadUsesSynchronousDelete();
@@ -514,6 +515,7 @@ void SourceContractTest::duplicateInstanceExitsWithoutQGuiAppExit()
     const QString duplicateInstanceBlock = source.mid(lockFail, clearCache - lockFail);
     QVERIFY(!duplicateInstanceBlock.contains(QStringLiteral("qGuiApp->exit();")));
     QVERIFY(!duplicateInstanceBlock.contains(QStringLiteral("SharedQmlEngine")));
+    QVERIFY(!duplicateInstanceBlock.contains(QStringLiteral("globalEngine()")));
     QVERIFY(duplicateInstanceBlock.contains(QStringLiteral("i18n(\"An instance is already running!, use --replace to restart Latte\")")));
     QVERIFY(duplicateInstanceBlock.contains(QStringLiteral("return 0;")));
 }
@@ -1045,14 +1047,19 @@ void SourceContractTest::knsCompatImportsAreAvailableForSystemInstall()
     QVERIFY(mainSource.contains(QStringLiteral("void addLatteQmlImportPaths(QQmlEngine *engine)")));
 
     // addLatteQmlImportPaths is called on the shared engine after creation.
+    // libplasma < 6.8 primes it through SharedQmlEngine; 6.8 removed that
+    // class and exposes the same engine as PlasmaQuick::globalEngine().
     const int appCreation = mainSource.indexOf(QStringLiteral("QApplication app(argc, argv);"));
     QVERIFY(appCreation >= 0);
     const int ensureCompatCall = mainSource.indexOf(QStringLiteral("ensureKnsCompat();"), appCreation);
     const int sharedEngineCreation = mainSource.indexOf(QStringLiteral("std::make_shared<PlasmaQuick::SharedQmlEngine>(&app);"), appCreation);
-    const int addImportPathsCall = mainSource.indexOf(QStringLiteral("addLatteQmlImportPaths(sharedEngine->engine().get());"), sharedEngineCreation);
+    const int globalEngineCreation = mainSource.indexOf(QStringLiteral("std::shared_ptr<QQmlEngine> sharedEngine = PlasmaQuick::globalEngine();"), appCreation);
+    const int addImportPathsCall = mainSource.indexOf(QStringLiteral("addLatteQmlImportPaths(sharedQmlEngine);"), appCreation);
     QVERIFY(ensureCompatCall > appCreation);
     QVERIFY(sharedEngineCreation > ensureCompatCall);
+    QVERIFY(globalEngineCreation > ensureCompatCall);
     QVERIFY(addImportPathsCall > sharedEngineCreation);
+    QVERIFY(addImportPathsCall > globalEngineCreation);
 
     // The old env var approach must NOT be present.
     QVERIFY(!mainSource.contains(QStringLiteral("ensureKnsCompatQmlImportPaths")));
@@ -4705,6 +4712,56 @@ SourceContractTest::taskBackgroundThicknessKeepsItsMetricsContract()
     // overrides stay authoritative for task-edge visuals.
     QVERIFY(shadowsSource.contains(QStringLiteral("readonly property int thickness: appletAbilities.metrics.backgroundThickness")));
     QVERIFY(!shadowsSource.contains(QStringLiteral("readonly property int thickness: appletAbilities.metrics.totals.thickness")));
+}
+
+void SourceContractTest::plasma68ContainmentScreenAndImportContracts()
+{
+    const auto readSource = [](const QString &relativePath) {
+        QFile file(QStringLiteral(LATTE_SOURCE_DIR "/") + relativePath);
+        return file.open(QFile::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+    };
+
+    // libplasma 6.8 stores Containment::screen(); every screen change Latte
+    // makes must be pushed through Corona::syncContainmentScreen(), which is
+    // the only place allowed to call the pre-6.8 reactToScreenChange().
+    const QString corona = readSource(QStringLiteral("app/lattecorona.cpp"));
+    QVERIFY(corona.contains(QStringLiteral("containment->setScreen(static_cast<uint>(screenId));")));
+    QCOMPARE(corona.count(QStringLiteral("reactToScreenChange()")), 1);
+
+    for (const QString &path : {QStringLiteral("app/view/positioner.cpp"), QStringLiteral("app/layout/genericlayout.cpp"), QStringLiteral("app/view/view.cpp")}) {
+        const QString source = readSource(path);
+        QVERIFY2(!source.isEmpty(), qPrintable(path));
+        QVERIFY2(!source.contains(QStringLiteral("reactToScreenChange()")), qPrintable(path));
+        QVERIFY2(source.contains(QStringLiteral("syncContainmentScreen(")), qPrintable(path));
+    }
+
+    // The view QML is loaded after the platform window exists, so the 6.8
+    // ContainmentView::resizeEvent() must not run without a root item.
+    const QString view = readSource(QStringLiteral("app/view/view.cpp"));
+    const int resizeEvent = view.indexOf(QStringLiteral("void View::resizeEvent(QResizeEvent *event)"));
+    QVERIFY(resizeEvent >= 0);
+    QVERIFY(view.indexOf(QStringLiteral("if (!rootObject()) {"), resizeEvent) > resizeEvent);
+
+    // 6.8 frees the view's i18n context object before the root QML item, so
+    // ~View detaches it or Panel.qml's Component.onDestruction crashes.
+    const int viewDestructor = view.indexOf(QStringLiteral("View::~View()"));
+    QVERIFY(viewDestructor >= 0);
+    QVERIFY(view.indexOf(QStringLiteral("context->setContextObject(nullptr);"), viewDestructor) > viewDestructor);
+
+    // Corona::importLayout() is gone in 6.8: containments get new ids, so
+    // sub-containment references are rewritten before any containment is
+    // restored, and restored containments are guarded against deletion by
+    // the system tray migration.
+    const QString storage = readSource(QStringLiteral("app/layouts/storage.cpp"));
+    const int importStart = storage.indexOf(QStringLiteral("QList<Plasma::Containment *> Storage::importContainmentsToCorona("));
+    QVERIFY(importStart >= 0);
+    const int create = storage.indexOf(QStringLiteral("corona->createContainmentForImport("), importStart);
+    const int rewrite = storage.indexOf(QStringLiteral("subIdentityGroup.writeEntry("), importStart);
+    const int restore = storage.indexOf(QStringLiteral("containment->restore(cg);"), importStart);
+    QVERIFY(create > importStart);
+    QVERIFY(rewrite > create);
+    QVERIFY(restore > rewrite);
+    QVERIFY(storage.indexOf(QStringLiteral("QPointer<Plasma::Containment>(containment)"), importStart) > importStart);
 }
 
 QTEST_MAIN(SourceContractTest)
