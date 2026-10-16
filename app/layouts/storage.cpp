@@ -10,6 +10,7 @@
 #include "pluginids.h"
 #include <coretypes.h>
 #include "appletids.h"
+#include "importedcontainments.h"
 #include "importer.h"
 #include "manager.h"
 #include "../lattecorona.h"
@@ -656,13 +657,12 @@ void Storage::moveToLayoutFile(const QString &layoutName)
 //! to the new ids first; otherwise the 6.8 system tray migration would copy
 //! a missing or unrelated containment group and lose its applets. That
 //! migration deletes the legacy inner containment while its parent applet is
-//! restored, hence the QPointer guard.
+//! restored, before or after the tray's own restore, so containments are
+//! tracked with QPointers and restored by ImportedContainments::restore().
 QList<Plasma::Containment *> Storage::importContainmentsToCorona(Latte::Corona *corona, const KSharedConfigPtr &filePtr)
 {
-    QList<Plasma::Containment *> newContainments;
-
     if (!corona) {
-        return newContainments;
+        return {};
     }
 
     KConfigGroup fileContainments(filePtr, QStringLiteral("Containments"));
@@ -735,33 +735,16 @@ QList<Plasma::Containment *> Storage::importContainmentsToCorona(Latte::Corona *
     //! Applets are restored with the ids of their config groups, so the ids
     //! must be unique before the first restore().
     QList<KConfigGroup> importedGroups;
+    QList<QPointer<Plasma::Containment>> restoreOrder;
 
     for (const auto &entry : std::as_const(created)) {
         importedGroups << KConfigGroup(&coronaContainments, assigned[entry.first]);
+        restoreOrder << entry.second;
     }
 
     AppletIds::makeUnique(importedGroups, usedIds);
 
-    for (const auto &entry : std::as_const(created)) {
-        Plasma::Containment *containment = entry.second;
-
-        if (!containment) {
-            continue;
-        }
-
-        containment->init();
-        KConfigGroup cg = containment->config();
-        containment->restore(cg);
-        containment->updateConstraints(Plasma::Applet::StartupCompletedConstraint);
-        containment->save(cg);
-        corona->requestConfigSync();
-        containment->flushPendingConstraintsEvents();
-        Q_EMIT corona->containmentAdded(containment);
-
-        newContainments << containment;
-    }
-
-    return newContainments;
+    return ImportedContainments::restore(corona, restoreOrder);
 }
 #endif
 

@@ -971,6 +971,14 @@ add_executable(appletidsunittest EXCLUDE_FROM_ALL ${appletidsunittest_SRCS})
 target_link_libraries(appletidsunittest Qt6::Core Qt6::Test KF6::ConfigCore)
 latte_add_test(appletidsunittest)
 
+set(importedcontainmentsunittest_SRCS
+    importedcontainmentsunittest.cpp
+    ../app/layouts/importedcontainments.cpp
+)
+add_executable(importedcontainmentsunittest EXCLUDE_FROM_ALL ${importedcontainmentsunittest_SRCS})
+target_link_libraries(importedcontainmentsunittest Qt6::Gui Qt6::Test KF6::ConfigCore Plasma::Plasma)
+latte_add_offscreen_test(importedcontainmentsunittest)
+
 set(synchronizerlogictest_SRCS synchronizerlogictest.cpp)
 add_executable(synchronizerlogictest EXCLUDE_FROM_ALL ${synchronizerlogictest_SRCS})
 target_link_libraries(synchronizerlogictest Qt6::Core Qt6::Test)

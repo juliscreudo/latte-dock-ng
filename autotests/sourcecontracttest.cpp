@@ -4750,14 +4750,15 @@ void SourceContractTest::plasma68ContainmentScreenAndImportContracts()
 
     // Corona::importLayout() is gone in 6.8: containments get new ids, so
     // sub-containment references are rewritten before any containment is
-    // restored, and restored containments are guarded against deletion by
-    // the system tray migration.
+    // restored. The system tray migration can delete an imported containment
+    // during the restore of another one, so they are tracked with QPointers and
+    // restored by ImportedContainments::restore() (importedcontainmentsunittest).
     const QString storage = readSource(QStringLiteral("app/layouts/storage.cpp"));
     const int importStart = storage.indexOf(QStringLiteral("QList<Plasma::Containment *> Storage::importContainmentsToCorona("));
     QVERIFY(importStart >= 0);
     const int create = storage.indexOf(QStringLiteral("corona->createContainmentForImport("), importStart);
     const int rewrite = storage.indexOf(QStringLiteral("subIdentityGroup.writeEntry("), importStart);
-    const int restore = storage.indexOf(QStringLiteral("containment->restore(cg);"), importStart);
+    const int restore = storage.indexOf(QStringLiteral("ImportedContainments::restore(corona, restoreOrder);"), importStart);
     QVERIFY(create > importStart);
     QVERIFY(rewrite > create);
     QVERIFY(restore > rewrite);
@@ -4803,7 +4804,7 @@ void SourceContractTest::importedAppletIdsStayUniqueIncludingNestedApplets()
     const int used = storage.indexOf(QStringLiteral("corona->containmentsIds() + corona->appletsIds()"), importStart);
     const int copy = storage.indexOf(QStringLiteral("fileContainments.group(entry.first).copyTo(&coronaGroup);"), importStart);
     const int unique = storage.indexOf(QStringLiteral("AppletIds::makeUnique(importedGroups, usedIds);"), importStart);
-    const int restore = storage.indexOf(QStringLiteral("containment->restore(cg);"), importStart);
+    const int restore = storage.indexOf(QStringLiteral("ImportedContainments::restore(corona, restoreOrder);"), importStart);
     QVERIFY(importStart >= 0);
     QVERIFY(create > importStart);
     QVERIFY(used > create);
