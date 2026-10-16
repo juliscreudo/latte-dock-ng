@@ -20,6 +20,7 @@
 #include "layout/abstractlayout.h"
 #include "layout/centrallayout.h"
 #include "layout/genericlayout.h"
+#include "layouts/appletids.h"
 #include "layouts/importer.h"
 #include "layouts/manager.h"
 #include "layouts/synchronizer.h"
@@ -87,6 +88,19 @@
 #include <KWayland/Client/plasmawindowmanagement.h>
 
 namespace {
+
+//! libplasma 6.8 hosts the system tray items in a containment nested inside
+//! the tray applet instead of in a separate corona containment.
+void appendLoadedAppletIds(const Plasma::Containment *containment, QStringList &ids)
+{
+    for (const auto applet : containment->applets()) {
+        ids << QString::number(applet->id());
+
+        if (const auto nested = qobject_cast<const Plasma::Containment *>(applet)) {
+            appendLoadedAppletIds(nested, ids);
+        }
+    }
+}
 
 QUrl launcherUrlFromString(const QString &launcherUrl)
 {
@@ -1374,10 +1388,14 @@ QStringList Corona::appletsIds()
     QStringList ids;
 
     for (const auto containment : containments()) {
-        auto applets = containment->config().group(QStringLiteral("Applets"));
-        ids << applets.groupList();
+        //! The config also lists applets that are not loaded, while a freshly
+        //! added applet is only written there on the next config sync; an id
+        //! is taken if either source has it.
+        ids << Layouts::AppletIds::collect(containment->config().group(QStringLiteral("Applets")));
+        appendLoadedAppletIds(containment, ids);
     }
 
+    ids.removeDuplicates();
     return ids;
 }
 

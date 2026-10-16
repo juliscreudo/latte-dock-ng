@@ -76,6 +76,7 @@ private Q_SLOTS:
     void qtQuickGpuPreferenceKeepsSoftwareFallbackAvailable();
     void knsCompatImportsAreAvailableForSystemInstall();
     void plasma68ContainmentScreenAndImportContracts();
+    void importedAppletIdsStayUniqueIncludingNestedApplets();
     void layerShellSetScreenGuardPreventsBuildRegression();
     void genericLayoutUnloadUsesSynchronousDelete();
     void synchronizerUnloadUsesSynchronousDelete();
@@ -4762,6 +4763,54 @@ void SourceContractTest::plasma68ContainmentScreenAndImportContracts()
     QVERIFY(rewrite > create);
     QVERIFY(restore > rewrite);
     QVERIFY(storage.indexOf(QStringLiteral("QPointer<Plasma::Containment>(containment)"), importStart) > importStart);
+}
+
+void SourceContractTest::importedAppletIdsStayUniqueIncludingNestedApplets()
+{
+    const auto readSource = [](const QString &relativePath) {
+        QFile file(QStringLiteral(LATTE_SOURCE_DIR "/") + relativePath);
+        return file.open(QFile::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+    };
+
+    // libplasma 6.8 nests the system tray items inside the tray applet, so the
+    // ids in use must include nested applets (stored and loaded ones).
+    const QString corona = readSource(QStringLiteral("app/lattecorona.cpp"));
+    const int coronaIds = corona.indexOf(QStringLiteral("QStringList Corona::appletsIds()"));
+    QVERIFY(coronaIds >= 0);
+    QVERIFY(corona.indexOf(QStringLiteral("Layouts::AppletIds::collect("), coronaIds) > coronaIds);
+    QVERIFY(corona.indexOf(QStringLiteral("appendLoadedAppletIds(containment, ids);"), coronaIds) > coronaIds);
+
+    const QString storage = readSource(QStringLiteral("app/layouts/storage.cpp"));
+    const int fileIds = storage.indexOf(QStringLiteral("QStringList Storage::appletsIds(const QString &filepath)"));
+    QVERIFY(fileIds >= 0);
+    QVERIFY(storage.indexOf(QStringLiteral("AppletIds::collect("), fileIds) > fileIds);
+
+    // newUniqueIdsFile() copies nested applets with their original ids and
+    // must make them unique after the copy.
+    const int newIds = storage.indexOf(QStringLiteral("QString Storage::newUniqueIdsFile("));
+    const int newIdsCopy = storage.indexOf(QStringLiteral("appletGroup.copyTo(&newAppletGroup);"), newIds);
+    const int newIdsUnique = storage.indexOf(QStringLiteral("AppletIds::makeUnique(newContainmentGroups, usedIds);"), newIds);
+    const int newIdsEnd = storage.indexOf(QStringLiteral("return tempFile;"), newIds);
+    QVERIFY(newIds >= 0);
+    QVERIFY(newIdsCopy > newIds);
+    QVERIFY(newIdsUnique > newIdsCopy);
+    QVERIFY(newIdsEnd > newIdsUnique);
+
+    // Plasma 6.8 picks the imported containment ids itself: the ids in use are
+    // collected after the containments exist, and the applet ids are made
+    // unique before any applet is restored with the id of its config group.
+    const int importStart = storage.indexOf(QStringLiteral("QList<Plasma::Containment *> Storage::importContainmentsToCorona("));
+    const int create = storage.indexOf(QStringLiteral("corona->createContainmentForImport("), importStart);
+    const int used = storage.indexOf(QStringLiteral("corona->containmentsIds() + corona->appletsIds()"), importStart);
+    const int copy = storage.indexOf(QStringLiteral("fileContainments.group(entry.first).copyTo(&coronaGroup);"), importStart);
+    const int unique = storage.indexOf(QStringLiteral("AppletIds::makeUnique(importedGroups, usedIds);"), importStart);
+    const int restore = storage.indexOf(QStringLiteral("containment->restore(cg);"), importStart);
+    QVERIFY(importStart >= 0);
+    QVERIFY(create > importStart);
+    QVERIFY(used > create);
+    QVERIFY(copy > used);
+    QVERIFY(unique > copy);
+    QVERIFY(restore > unique);
 }
 
 QTEST_MAIN(SourceContractTest)

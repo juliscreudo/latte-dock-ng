@@ -952,6 +952,14 @@ target_include_directories(storagelogictest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/
 target_link_libraries(storagelogictest Qt6::Core Qt6::Test KF6::ConfigCore)
 latte_add_test(storagelogictest)
 
+set(appletidsunittest_SRCS
+    appletidsunittest.cpp
+    ../app/layouts/appletids.cpp
+)
+add_executable(appletidsunittest EXCLUDE_FROM_ALL ${appletidsunittest_SRCS})
+target_link_libraries(appletidsunittest Qt6::Core Qt6::Test KF6::ConfigCore)
+latte_add_test(appletidsunittest)
+
 set(synchronizerlogictest_SRCS synchronizerlogictest.cpp)
 add_executable(synchronizerlogictest EXCLUDE_FROM_ALL ${synchronizerlogictest_SRCS})
 target_link_libraries(synchronizerlogictest Qt6::Core Qt6::Test)

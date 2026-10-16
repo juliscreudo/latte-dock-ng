@@ -9,6 +9,7 @@
 // local
 #include "pluginids.h"
 #include <coretypes.h>
+#include "appletids.h"
 #include "importer.h"
 #include "manager.h"
 #include "../lattecorona.h"
@@ -339,9 +340,7 @@ QStringList Storage::appletsIds(const QString &filepath)
     KConfigGroup containments = KConfigGroup(filePtr, QStringLiteral("Containments"));
 
     for (const auto &cId : containments.groupList()) {
-        for (const auto &aId : containments.group(cId).group(QStringLiteral("Applets")).groupList()) {
-            ids << aId;
-        }
+        ids << AppletIds::collect(containments.group(cId).group(QStringLiteral("Applets")));
     }
 
     return ids;
@@ -482,11 +481,7 @@ QString Storage::newUniqueIdsFile(QString originFile, const Layout::GenericLayou
     //! update applet ids in their containment order and in MultipleLayouts update also the layoutId
     for (const auto &cId : investigate_conts.groupList()) {
         //! Update options that contain applet ids
-        //! (appletOrder) and (lockedZoomApplets) and (userBlocksColorizingApplets)
-        QStringList options;
-        options << QStringLiteral("appletOrder") << QStringLiteral("lockedZoomApplets") << QStringLiteral("userBlocksColorizingApplets");
-
-        for (const auto &settingStr : options) {
+        for (const auto &settingStr : AppletIds::appletIdListEntries()) {
             QString order1 = investigate_conts.group(cId).group(QStringLiteral("General")).readEntry(settingStr, QString());
 
             if (!order1.isEmpty()) {
@@ -552,6 +547,29 @@ QString Storage::newUniqueIdsFile(QString originFile, const Layout::GenericLayou
             }
         }
     }
+
+    //! The top-level applets above already have unique ids, but applets nested
+    //! inside them were copied with their original ids. libplasma 6.8 nests the
+    //! system tray items that way, so duplicating a dock with a tray would give
+    //! both trays the same item ids and could reuse them for the new top-level
+    //! applets. allIds already includes the nested ids of the destination.
+    QSet<uint> usedIds;
+
+    for (const auto &id : std::as_const(allIds)) {
+        usedIds.insert(id.toUInt());
+    }
+
+    for (const auto &contId : std::as_const(toInvestigateContainmentIds)) {
+        usedIds.insert(assigned[contId].toUInt());
+    }
+
+    QList<KConfigGroup> newContainmentGroups;
+
+    for (const auto &contId : fixedNewContainmets.groupList()) {
+        newContainmentGroups << fixedNewContainmets.group(contId);
+    }
+
+    AppletIds::makeUnique(newContainmentGroups, usedIds);
 
     file2Ptr->reparseConfiguration();
 
@@ -675,6 +693,17 @@ QList<Plasma::Containment *> Storage::importContainmentsToCorona(Latte::Corona *
         created << qMakePair(cId, QPointer<Plasma::Containment>(containment));
     }
 
+    //! newUniqueIdsFile() chose the applet ids before Plasma picked the new
+    //! containment ids above from its own counter, which hands out the next id
+    //! after the highest one in use: exactly the id newUniqueIdsFile() picks
+    //! for the first applet when the existing ids have no gaps. Collect the ids
+    //! in use now that the new containments exist (they have no applets yet).
+    QSet<uint> usedIds;
+
+    for (const auto &id : corona->containmentsIds() + corona->appletsIds()) {
+        usedIds.insert(id.toUInt());
+    }
+
     KConfigGroup coronaContainments(corona->config(), QStringLiteral("Containments"));
 
     for (const auto &entry : std::as_const(created)) {
@@ -702,6 +731,16 @@ QList<Plasma::Containment *> Storage::importContainmentsToCorona(Latte::Corona *
             subIdentityGroup.writeEntry(m_subIdentities[entityIndex].cfgProperty, assigned[subId]);
         }
     }
+
+    //! Applets are restored with the ids of their config groups, so the ids
+    //! must be unique before the first restore().
+    QList<KConfigGroup> importedGroups;
+
+    for (const auto &entry : std::as_const(created)) {
+        importedGroups << KConfigGroup(&coronaContainments, assigned[entry.first]);
+    }
+
+    AppletIds::makeUnique(importedGroups, usedIds);
 
     for (const auto &entry : std::as_const(created)) {
         Plasma::Containment *containment = entry.second;
