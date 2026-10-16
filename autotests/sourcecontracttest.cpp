@@ -989,8 +989,17 @@ void SourceContractTest::pointerWindowTrackerRemovesDestroyedWindows()
     const QString viewSource = QString::fromUtf8(viewSourceFile.readAll());
 
     QVERIFY(viewSource.contains(QStringLiteral("connect(window, &QObject::destroyed, this, &View::onPointerWindowDestroyed, Qt::UniqueConnection)")));
-    QVERIFY(viewSource.contains(QStringLiteral("void View::onPointerWindowDestroyed(QObject *window)")));
-    QVERIFY(viewSource.contains(QStringLiteral("m_pointerWindows.remove(w)")));
+
+    //! destroyed() is emitted from ~QObject, when the object is no longer a
+    //! QWindow: a qobject_cast there returns null and silently keeps the
+    //! dangling entry, which ~View later disconnects from (SIGSEGV after the
+    //! applet alternatives dialog closed with the pointer inside it).
+    const int slot = viewSource.indexOf(QStringLiteral("void View::onPointerWindowDestroyed(QObject *window)"));
+    QVERIFY(slot >= 0);
+    const QString body = viewSource.mid(slot, viewSource.indexOf(QStringLiteral("\n}\n"), slot) - slot);
+    QVERIFY(body.contains(QStringLiteral("m_pointerWindows.removeIf(")));
+    QVERIFY(body.contains(QStringLiteral("static_cast<QObject *>(tracked) == window")));
+    QVERIFY(!body.contains(QStringLiteral("qobject_cast<QWindow *>(window)")));
 }
 
 void SourceContractTest::qtQuickGpuPreferenceKeepsSoftwareFallbackAvailable()
