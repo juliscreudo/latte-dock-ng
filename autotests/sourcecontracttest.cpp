@@ -4,7 +4,9 @@
 */
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
+#include <QRegularExpression>
 #include <QStringList>
 #include <QTest>
 
@@ -77,6 +79,7 @@ private Q_SLOTS:
     void knsCompatImportsAreAvailableForSystemInstall();
     void plasma68ContainmentScreenAndImportContracts();
     void importedAppletIdsStayUniqueIncludingNestedApplets();
+    void qmlParameterlessHandlersDoNotReadUndeclaredIndex();
     void appletAlternativesUseLattesOwnDialogOnPlasma68();
     void layerShellSetScreenGuardPreventsBuildRegression();
     void genericLayoutUnloadUsesSynchronousDelete();
@@ -4872,6 +4875,65 @@ void SourceContractTest::appletAlternativesUseLattesOwnDialogOnPlasma68()
     QVERIFY(alternativesHelper.contains(QStringLiteral("return itemFor(m_applet);")));
     QVERIFY(alternativesHelper.contains(QStringLiteral("PlasmaQuick::AppletQuickItem *contItem = itemFor(cont);")));
     QVERIFY(alternativesHelper.contains(QStringLiteral("Q_ARG(QRectF, QRectF(newPos, QSizeF()))")));
+}
+
+void SourceContractTest::qmlParameterlessHandlersDoNotReadUndeclaredIndex()
+{
+    // Qt 6 passes signal arguments to a "function onSignal()" handler only when
+    // the function declares them. A bare `index` in a parameterless handler
+    // throws a ReferenceError at runtime (this broke the dock settings Add...
+    // button). Declare the parameter, or qualify the name (model.index) when a
+    // delegate's index is meant.
+    static const QRegularExpression handler(QStringLiteral("function\\s+(on[A-Z]\\w*)\\s*\\(\\s*\\)\\s*\\{"));
+    static const QRegularExpression bareIndex(QStringLiteral("(?<![.\\w])index\\b"));
+    static const QRegularExpression localIndex(QStringLiteral("\\b(var|let|const)\\s+index\\b"));
+
+    QStringList offenders;
+    int scannedHandlers{0};
+
+    for (const QString &root : {QStringLiteral("containment"),
+                                QStringLiteral("declarativeimports"),
+                                QStringLiteral("indicators"),
+                                QStringLiteral("plasmoid"),
+                                QStringLiteral("separator"),
+                                QStringLiteral("shell")}) {
+        QDirIterator it(QStringLiteral(LATTE_SOURCE_DIR "/") + root, {QStringLiteral("*.qml")}, QDir::Files, QDirIterator::Subdirectories);
+
+        while (it.hasNext()) {
+            const QString path = it.next();
+            QFile file(path);
+            QVERIFY2(file.open(QFile::ReadOnly), qPrintable(path));
+            const QString source = QString::fromUtf8(file.readAll());
+
+            for (auto match = handler.globalMatch(source); match.hasNext();) {
+                const QRegularExpressionMatch found = match.next();
+                ++scannedHandlers;
+
+                qsizetype end = found.capturedEnd();
+                int depth = 1;
+
+                while (end < source.size() && depth > 0) {
+                    if (source.at(end) == QLatin1Char('{')) {
+                        ++depth;
+                    } else if (source.at(end) == QLatin1Char('}')) {
+                        --depth;
+                    }
+
+                    ++end;
+                }
+
+                const QString body = source.mid(found.capturedEnd(), end - found.capturedEnd());
+
+                if (bareIndex.match(body).hasMatch() && !localIndex.match(body).hasMatch()) {
+                    const qsizetype line = source.left(found.capturedStart()).count(QLatin1Char('\n')) + 1;
+                    offenders << QStringLiteral("%1:%2 %3()").arg(QDir(QStringLiteral(LATTE_SOURCE_DIR)).relativeFilePath(path)).arg(line).arg(found.captured(1));
+                }
+            }
+        }
+    }
+
+    QVERIFY2(scannedHandlers > 0, "no QML signal handlers were scanned");
+    QVERIFY2(offenders.isEmpty(), qPrintable(offenders.join(QStringLiteral(", "))));
 }
 
 QTEST_MAIN(SourceContractTest)
