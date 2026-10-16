@@ -77,6 +77,7 @@ private Q_SLOTS:
     void knsCompatImportsAreAvailableForSystemInstall();
     void plasma68ContainmentScreenAndImportContracts();
     void importedAppletIdsStayUniqueIncludingNestedApplets();
+    void appletAlternativesUseLattesOwnDialogOnPlasma68();
     void layerShellSetScreenGuardPreventsBuildRegression();
     void genericLayoutUnloadUsesSynchronousDelete();
     void synchronizerUnloadUsesSynchronousDelete();
@@ -3856,13 +3857,11 @@ void SourceContractTest::appletItemForAppletInSafeContextsUsesPublicApi()
 void SourceContractTest::appletItemForAppletExcludedContextsPreservePropertyAccess()
 {
     // Excluded contexts: itemForApplet returns nullptr — keep _plasma_graphicObject.
-
-    // alternativeshelper.cpp: applet() getter and loadAlternative (applet not registered yet)
-    QFile alt(QStringLiteral(LATTE_SOURCE_DIR "/app/alternativeshelper.cpp"));
-    QVERIFY(alt.open(QFile::ReadOnly));
-    const QString altSource = QString::fromUtf8(alt.readAll());
-    QVERIFY(altSource.contains(QStringLiteral("_plasma_graphicObject")));
-    QVERIFY(!altSource.contains(QStringLiteral("itemForApplet")));
+    // alternativeshelper.cpp is no longer one of them: it runs for applets that
+    // are already loaded, and on libplasma 6.8 _plasma_graphicObject is not
+    // published at all (the dialog opened in a corner and could not replace
+    // the applet). It now prefers itemForApplet(), see
+    // appletAlternativesUseLattesOwnDialogOnPlasma68().
 
     // view.cpp: containment-level lookups (containment graphic item positioning)
     QFile view(QStringLiteral(LATTE_SOURCE_DIR "/app/view/view.cpp"));
@@ -4811,6 +4810,58 @@ void SourceContractTest::importedAppletIdsStayUniqueIncludingNestedApplets()
     QVERIFY(copy > used);
     QVERIFY(unique > copy);
     QVERIFY(restore > unique);
+}
+
+void SourceContractTest::appletAlternativesUseLattesOwnDialogOnPlasma68()
+{
+    const auto readSource = [](const QString &relativePath) {
+        QFile file(QStringLiteral(LATTE_SOURCE_DIR "/") + relativePath);
+        return file.open(QFile::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+    };
+
+    // Plasma's dialog needs a plasmashell-internal type since 6.8, so Latte's
+    // package must provide its own file instead of the desktop fallback.
+    const QString package = readSource(QStringLiteral("app/package/lattepackage.cpp"));
+    const int versionGuard = package.indexOf(QStringLiteral("#if PLASMA_VERSION >= QT_VERSION_CHECK(6, 8, 0)"));
+    const int definition = package.indexOf(QStringLiteral("addFileDefinition(\"appletalternativesui\", QStringLiteral(\"explorer/AppletAlternatives.qml\"))"));
+    QVERIFY(versionGuard >= 0);
+    QVERIFY(definition > versionGuard);
+
+    const QString dialog = readSource(QStringLiteral("shell/package/contents/explorer/AppletAlternatives.qml"));
+    QVERIFY(!dialog.isEmpty());
+    QVERIFY(!dialog.contains(QStringLiteral("import org.kde.plasma.shell\n")));
+    QVERIFY(!dialog.contains(QStringLiteral("AlternativesHelper alternativesHelper")));
+    QVERIFY(dialog.contains(QStringLiteral("readonly property QtObject helper: alternativesHelper")));
+
+    // The helper is a root context property published between setSource() and
+    // completeInitialization(), when the dialog's bindings are first evaluated.
+    const QString corona = readSource(QStringLiteral("app/lattecorona.cpp"));
+    const int show = corona.indexOf(QStringLiteral("void Corona::showAlternativesForApplet(Plasma::Applet *applet)"));
+    const int delayed = corona.indexOf(QStringLiteral("qmlObj->setInitializationDelayed(true);"), show);
+    const int source = corona.indexOf(QStringLiteral("qmlObj->setSource("), show);
+    const int helper = corona.indexOf(QStringLiteral("setContextProperty(QStringLiteral(\"alternativesHelper\"), helper);"), show);
+    const int complete = corona.indexOf(QStringLiteral("qmlObj->completeInitialization();"), show);
+    QVERIFY(show >= 0);
+    QVERIFY(delayed > show);
+    QVERIFY(source > delayed);
+    QVERIFY(helper > source);
+    QVERIFY(complete > helper);
+
+    // Plasma 6 does not publish "_plasma_graphicObject" (kept only as a
+    // fallback after itemForApplet()) and its ContainmentItem::createApplet()
+    // takes a QRectF: with the Plasma 5 calls the dialog opened in a corner
+    // and choosing an alternative did nothing.
+    const QString alternativesHelper = readSource(QStringLiteral("app/alternativeshelper.cpp"));
+    const int itemFor = alternativesHelper.indexOf(QStringLiteral("PlasmaQuick::AppletQuickItem *itemFor(Plasma::Applet *applet)"));
+    const int preferred = alternativesHelper.indexOf(QStringLiteral("PlasmaQuick::AppletQuickItem::itemForApplet(applet);"), itemFor);
+    const int fallback = alternativesHelper.indexOf(QStringLiteral("applet->property(\"_plasma_graphicObject\")"), itemFor);
+    QVERIFY(itemFor >= 0);
+    QVERIFY(preferred > itemFor);
+    QVERIFY(fallback > preferred);
+    QCOMPARE(alternativesHelper.count(QStringLiteral("_plasma_graphicObject\")")), 1);
+    QVERIFY(alternativesHelper.contains(QStringLiteral("return itemFor(m_applet);")));
+    QVERIFY(alternativesHelper.contains(QStringLiteral("PlasmaQuick::AppletQuickItem *contItem = itemFor(cont);")));
+    QVERIFY(alternativesHelper.contains(QStringLiteral("Q_ARG(QRectF, QRectF(newPos, QSizeF()))")));
 }
 
 QTEST_MAIN(SourceContractTest)
