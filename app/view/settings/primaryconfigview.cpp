@@ -213,6 +213,17 @@ void PrimaryConfigView::initParentView(Latte::View *view)
 {
     setIsReady(false);
 
+    //! LatteDockConfiguration.qml binds the dialog's latteView to
+    //! configurationLatteView, because a property named latteView cannot bind
+    //! to the latteView context property. This window is shared by all docks,
+    //! so both must follow every parent switch: otherwise the dialog keeps
+    //! editing the first dock it was opened for (Add... > Duplicate Dock
+    //! copies that dock) and turns null once that dock is deleted.
+    //! Set it before SubConfigView::initParentView(): once the edited dock was
+    //! deleted, the plasmoid context property set there reloads the dialog,
+    //! which must not be created with a null configurationLatteView.
+    rootContext()->setContextProperty(QStringLiteral("configurationLatteView"), view);
+
     SubConfigView::initParentView(view);
 
     viewconnections << connect(m_latteView, &Latte::View::layoutChanged, this, [this]() {
